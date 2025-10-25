@@ -68,17 +68,22 @@
 
 #define DEBUG_ENABLED           true       //Enables serial printing of all messages
 #define CELL_COUNT              13      //Number of cells in pack
-#define MIN_CELL_MV             3300    //Cell cutoff voltage
-#define LIMP_CELL_MV            3000    //Cell cutoff voltage in limp mode
-#define EMPTY_CELL_MV           3500    //Millivolts to conisder cell fully discharged under no load
+//#define MIN_CELL_MV             3300    //Cell cutoff voltage
+#define MIN_CELL_MV             3100    //10/25/25 05:53:30 PM Changed to 3100 to more closely match B2XR behavior
+//#define LIMP_CELL_MV            3000    //Cell cutoff voltage in limp mode
+#define LIMP_CELL_MV            2900    //10/25/25 05:54:27 PM Changed to 2900 to match LG HG2 minimum voltage (Actual HARD cutoff is about 2800mV)
+//#define EMPTY_CELL_MV           3500    //Millivolts to conisder cell fully discharged under no load
+#define EMPTY_CELL_MV           3200    //10/25/25 05:55:16 PM Changed to 3200 to more closely match B2XR behavior
 #define MAX_CELL_MV             4250    //Maximum cell voltage while charger is not connected (set higher for regen braking)
-#define MAX_CELL_CHG            4120    //Maximum cell voltage while charger is connected
-#define CELL_REENABLE_CHG       4050    //After charging has reached full, re-enable charging when cell voltage drops below this value
+//#define MAX_CELL_CHG            4120    //Maximum cell voltage while charger is connected
+#define MAX_CELL_CHG            4000    //10/25/25 05:56:33 PMChanged to 4000 to more closely match B2XR behavior
+//#define CELL_REENABLE_CHG       4050    //After charging has reached full, re-enable charging when cell voltage drops below this value
+#define CELL_REENABLE_CHG       3900    //10/25/25 05:56:28 PM Changed to 3900 to more closely match B2XR behavior
 #define CHG_CONN_PAUSE_TIME     3000    //When charger is first connected, the voltage sometimes spikes briefly, add a cooldown to prevent stopping charging
 #define DO_CELL_BALANCING       1       //Flipswitch for doing balancing using BMS
 #define MIN_BALANCING_MV        20      //Number of millivolts between minimum cell voltage and maximum cell voltage
 #define BALANCE_MODE            0       //MANUAL SWITCH: set controller in sleep state to allow BMS to balance
-#define CHARGE_DETECT_ADC       300     //Raw ADC reading on charge detect pin that incdicates connected charger
+#define CHARGE_DETECT_ADC       300     //Raw ADC reading on charge detect pin that indicates connected charger
 #define CHARGE_START_DELAY      1000    //number of milliseconds before starting charging (debounce)
 #define CHARGE_PRECHARGE_DELAY  1500    //Number of milliseconds to leave precharge circuit enabled
 #define BALANCE_LED_TICKS       80      //Number of 50ms ticks for flashing indicator LED
@@ -97,6 +102,8 @@ volatile bool updateCAN = false;        //Triggers sending of CAN Bus packets
 volatile bool updateBMS = false;        //Triggers querying of battery management system parameters
 volatile bool updateADC = false;        //Triggers querying of ADC channels
 volatile bool updateDebug = false;      //Triggers debug messages printing over UART
+//volatile bool updateTemperatureArray = false; //10/25/25 06:18:56 PM Triggers update of the temperatures
+
 
 //Global Status Flags
 volatile bool CANInitialized = false;   //Flag to check if CAN Bus has been initialized successfully
@@ -173,6 +180,7 @@ volatile uint16_t adc_BMSRegulatorSense = 0xFFFF;           //Voltage produced b
 void configureLEDs(void);
 bool configureBMS(void);
 void updateSOC(void);
+void updateTemperatures(void); //10/25/25 06:20:05 PM
 void updateADCs(void);
 void updateCharging(void);
 void updateLEDs(void);
@@ -292,11 +300,13 @@ int main(void)
             updateCAN = false;
         }
         
+        
         if(updateBMS){  //Check if timer set flag to fetch statuses from BMS. Every 250ms (5 ticks of 50ms timer).
             bms_Update();   //Reads status register, voltages, current, etc from BMS
             batteryCurrentBMS = (float)bms_GetBatteryCurrent()/-1000.0; //Get current in amps from the BMS
             chargeCurrentDetected = (batteryCurrentBMS <= CHARGE_CURRENT_THR);  //Check if we're charging
             updateSOC();    //Update the state of charge based on the voltage measured by the BMS
+            updateTemperatures(); //10/25/25 06:23:30 PM Update temperature at the same time as SOC
             
             // Check maximum cell voltage and control charging
             uint16_t maxCellVoltage = bms_GetMaxCellVoltage();
@@ -323,6 +333,7 @@ int main(void)
                 powerGood = false;  //If there's an error, set powerGood false, will update LED state
             }
             updateBMS = false;
+            
         }
         
         if(updateADC){  //Check if the timer set flag to fetch ADC readings. Every 50ms.
@@ -480,6 +491,13 @@ bool configureBMS(void){
     bms_Update();   //Fetch first set of data from all cells
     return success;
 }
+
+void updateTemperatures(void){
+
+
+
+}
+
 
 //Takes and calculates SOC based on the lowest cell in the pack. This gives the user a better idea of when they will lose power.
 void updateSOC(void){
@@ -1081,6 +1099,7 @@ void balanceMode(void){
         if(updateBMS){
             bms_Update();
             updateSOC();
+            updateTemperatures(); //10/25/25 06:24:21 PM Update temperatures at the same time as SOC
             updateBMS = false;
         }
         __delay32(4000);
