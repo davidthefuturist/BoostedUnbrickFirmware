@@ -563,7 +563,7 @@ void bms_DisableCharging()
   Serial_println("disableCharging");
   uint8_t sys_ctrl2;
   sys_ctrl2 = bms_ReadRegister(SYS_CTRL2, &succeeded);
-  if(sys_ctrl2 & 0xFE) Serial_println("diableCharging: disabled");
+  if(sys_ctrl2 & 0xFE) Serial_println("disableCharging: disabled");
   sys_ctrl2 = sys_ctrl2 & 0xFE;
   bms_WriteRegister(SYS_CTRL2, sys_ctrl2, &succeeded);  // switch CHG on
 }

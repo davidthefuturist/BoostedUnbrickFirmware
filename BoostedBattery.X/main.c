@@ -118,6 +118,7 @@ volatile bool chargeSensed = false;                 //Flag set true when the cha
 volatile bool chargeCurrentDetected = false;        //Flag set true if the measured battery current is at a level that the cells are charging (used to tell if charging is complete)
 volatile bool chargerConnected = false;             //Flag set true if the charger is connected (derived from chargeSensed)
 volatile bool lastChargerConnected = false;         //Flag used to detect change in charging/not charging. Updates voltage limits on BMS when charging or not charging
+volatile bool powerOffWhenChargerNotConnected = false; //DW Flag used to initiate shutoff mode after charger has been removed from the battery
 volatile bool powerGood = false;                    //Flag indicating that battery can charge and discharge.
 volatile uint8_t batterySOC = 0;                    //Battery percentage estimate based on linear voltage model (0-100%)
 volatile uint16_t cellMinMaxDelta = 0;              //Number of millivolts between highest and lowest cells in the pack
@@ -177,6 +178,7 @@ volatile uint16_t adc_BMSRegulatorSense = 0xFFFF;           //Voltage produced b
 
 
 //Function prototypes
+void shutdownSequence(void); //11/02/25 04:34:16 PM
 void configureLEDs(void);
 bool configureBMS(void);
 void updateSOC(void);
@@ -364,8 +366,19 @@ int main(void)
         }
         
         if(chargerConnected != lastChargerConnected){   //If the charger has just been plugged in or unplugged
-            if(chargerConnected && DEBUG_ENABLED) Serial_println("Charger connected");
+            //if(chargerConnected && DEBUG_ENABLED) Serial_println("Charger connected");
+            //else Serial_println("Charger not connected");
+            if(chargerConnected){ 
+                Serial_println("Charger just connected");
+            }
+            else{
+                Serial_println("Charger just disconnected");
+                powerOffWhenChargerNotConnected = true;
+                shutdownSequence();
+            }
+            
             lastChargerConnected = chargerConnected;
+            
         }
         
         if(CAN1_ReceivedMessageCountGet() > 0){
@@ -421,7 +434,14 @@ int main(void)
         
         __delay32(100);
     }
+    
+    shutdownSequence();
        
+    
+}
+
+void shutdownSequence(void){
+    
     bms_DisableDischarging();   //Disconnect battery from speed controller
     bms_DisableCharging();
     
@@ -461,6 +481,9 @@ int main(void)
     __delay32(40000000);    //Wait some time after clearing power latch until MCU has brownout.
     
     return 1; 
+
+
+
 }
 
 //Configures the TLC59108 LED driver. We're using PWM mode
@@ -493,7 +516,12 @@ bool configureBMS(void){
 }
 
 void updateTemperatures(void){
-
+    Serial_println("Temperatures: ");
+    Serial_printlnf("Sensor 1: %f", bms_GetTemperatureDegC(1));
+    //Serial_printlnf("Sensor 2: %f", bms_GetTemperatureDegC(2));
+    //Serial_printlnf("Sensor 3: %f", bms_GetTemperatureDegC(3));
+    
+    
 
 
 }
@@ -527,7 +555,7 @@ void updateCharging(void){
             chargerConnectedTime = millis();
         }
         chargeSensed = true;
-        //bms_DisableCharging();
+        //bms_DisableCharging();  
     }
     else{
         chargeSensed = false;
