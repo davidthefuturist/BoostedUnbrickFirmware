@@ -96,6 +96,9 @@
 #define BUTTON_DEBOUNCE_TIME    30      //Number of milliseconds since last interrupt to ignore input
 #define BATT_CURR_AVG_COUNT     40      //Number of elements in battery current averaging array
 
+
+#define CAN_ID_PING       0x103434B0
+
 //Global Timer Flags
 volatile bool updateLED = false;        //Triggers update of the I2C LED chip
 volatile bool updateCAN = false;        //Triggers sending of CAN Bus packets
@@ -128,6 +131,9 @@ volatile uint8_t batteryAvgIndex = 0;               //Circular buffer index for 
 volatile long long avgBatteryCurrent = 0;           //Average battery current in mA
 volatile long batteryCurrentAvg[BATT_CURR_AVG_COUNT]= {0};  //Array to hold raw current readings. Used to calculate average
 volatile bool limpMode = false;                     //Flag to indicate limp mode. Lowers the discharge limit on the BMS from MIN_CELL_MV to LIMP_CELL_MV so you can squeeze more out of the cells in a pinch
+volatile bool shutdownFromESCDetected = false;
+
+
 
 //Counters
 volatile uint64_t chargerConnectedTime = 0;         //Number of milliseconds elapsed when the charger was last seen as connected
@@ -386,7 +392,27 @@ int main(void)
         }
         CAN_MSG_OBJ recCanMsg;
         if(CanReceive(&recCanMsg)){
-            if(DEBUG_ENABLED) Serial_printlnf("Got a CAN Message %x: %x %x %x %x %x %x %x %x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+            //if(DEBUG_ENABLED) Serial_printlnf("Got a CAN Message %x: %x %x %x %x %x %x %x %x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+            if(DEBUG_ENABLED) Serial_printlnf("Got a CAN Message %lx: %x %x %x %x %x %x %x %x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+            switch(recCanMsg.msgId){
+                    case CAN_ID_PING:
+                    // Now check the data payload
+                    if (recCanMsg.data[0] == 0x02) {
+                        Serial_println("Received Shutdown Command 0x02!");
+                        if(shutdownFromESCDetected==false){ //This way, we only trigger shutdownSequence() once
+                            Serial_println("Shutdown Sequence Triggered");
+                            shutdownFromESCDetected = true;
+                            shutdownSequence();
+                            
+                        }
+                        
+                        //shutdown goes here shutdownSequence();
+                    }
+                    else{
+                        Serial_println("Received ESC Ping Message");
+                    }
+                    break;
+            }
         }
         
         if(buttonPressed && buttonReady){   //Check if a series of button presses has finished (triggered by button interrupt)
