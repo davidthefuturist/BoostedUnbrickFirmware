@@ -97,7 +97,18 @@
 #define BATT_CURR_AVG_COUNT     40      //Number of elements in battery current averaging array
 
 
-#define CAN_ID_PING       0x103434B0
+
+
+
+#define versionFromESCID 0x10024020
+
+#define registrationStateESCID 0x10343160
+
+#define firmwareVersionESCID 0x10343440
+
+#define pingESCID 0x103434B0
+
+#define modeESCID 0x103B31A0
 
 //Global Timer Flags
 volatile bool updateLED = false;        //Triggers update of the I2C LED chip
@@ -106,7 +117,7 @@ volatile bool updateBMS = false;        //Triggers querying of battery managemen
 volatile bool updateADC = false;        //Triggers querying of ADC channels
 volatile bool updateDebug = false;      //Triggers debug messages printing over UART
 //volatile bool updateTemperatureArray = false; //10/25/25 06:18:56 PM Triggers update of the temperatures
-
+volatile bool verboseTemperatures = false; 
 
 //Global Status Flags
 volatile bool CANInitialized = false;   //Flag to check if CAN Bus has been initialized successfully
@@ -387,31 +398,201 @@ int main(void)
             
         }
         
+//        if(CAN1_ReceivedMessageCountGet() > 0){
+//            Serial_printlnf("I have a can message");
+//        }
+//        uint8_t payloadData[8] = {0}; 
+//        CAN_MSG_OBJ recCanMsg;
+//        
+//        //  Point the struct to our safe memory array!
+//        recCanMsg.data = payloadData; 
+//
+//        if(CanReceive(&recCanMsg)){
+//            //  Mask off the Node ID so the switch statement matches perfectly
+//            uint32_t maskedID = recCanMsg.msgId & 0xFFFFFFF0;
+//            
+//            if(DEBUG_ENABLED) Serial_printlnf("Got a CAN Message %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+//            
+//            switch(maskedID){
+//                
+//                
+//                    //#define versionFromESCID 0x10024020;
+//                    //
+//                    //#define registrationStateESCID 0x10343160;
+//                    //
+//                    //#define firmwareVersionESCID 0x10343440;
+//                    //
+//                    //#define pingESCID 0x103434B0;
+//                    //
+//                    //#define modeESCID 0x103B31A0;
+//                
+//                
+//                    case versionFromESCID:
+//                        Serial_printlnf("versionFromESC ID and Data %lx: %x %x %x %x %x %x %x %x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+//                                            // Now check the data payload
+//                    //                        if (recCanMsg.data[0] == 0x02) {
+//                    //                            Serial_println("Received Shutdown Command 0x02!");
+//                    //                            if(shutdownFromESCDetected==false){ //This way, we only trigger shutdownSequence() once
+//                    //                                Serial_println("Shutdown Sequence Triggered");
+//                    //                                shutdownFromESCDetected = true;
+//                    //                                shutdownSequence();
+//                    //
+//                    //                            }
+//                    //
+//                    //                            //shutdown goes here shutdownSequence();
+//                    //                        }
+//                    //                        else{
+//                    //                            Serial_println("Received ESC Ping Message");
+//                    //                        }
+//                        break;
+//                    case registrationStateESCID:
+//                        Serial_printlnf("registrationStateESC ID and Data %lx: %x %x %x %x %x %x %x %x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+//                                            // Now check the data payload
+//                    //                        if (recCanMsg.data[0] == 0x02) {
+//                    //                            Serial_println("Received Shutdown Command 0x02!");
+//                    //                            if(shutdownFromESCDetected==false){ //This way, we only trigger shutdownSequence() once
+//                    //                                Serial_println("Shutdown Sequence Triggered");
+//                    //                                shutdownFromESCDetected = true;
+//                    //                                shutdownSequence();
+//                    //
+//                    //                            }
+//                    //
+//                    //                            //shutdown goes here shutdownSequence();
+//                    //                        }
+//                    //                        else{
+//                    //                            Serial_println("Received ESC Ping Message");
+//                    //                        }
+//                        break;
+//                    
+//                    case firmwareVersionESCID:
+//                        Serial_printlnf("firmwareVersionESC ID and Data %lx: %x %x %x %x %x %x %x %x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+//                                        // Now check the data payload
+//                    //                        if (recCanMsg.data[0] == 0x02) {
+//                    //                            Serial_println("Received Shutdown Command 0x02!");
+//                    //                            if(shutdownFromESCDetected==false){ //This way, we only trigger shutdownSequence() once
+//                    //                                Serial_println("Shutdown Sequence Triggered");
+//                    //                                shutdownFromESCDetected = true;
+//                    //                                shutdownSequence();
+//                    //
+//                    //                            }
+//                    //
+//                    //                            //shutdown goes here shutdownSequence();
+//                    //                        }
+//                    //                        else{
+//                    //                            Serial_println("Received ESC Ping Message");
+//                    //                        }
+//                        break;
+//                        
+//                    case pingESCID:
+//                        Serial_printlnf("pingESC ID and Data %lx: %x %x %x %x %x %x %x %x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+//                        // Now check the data payload
+//                        if (recCanMsg.data[0] == 0x02) {
+//                            Serial_println("Received Shutdown Command 0x02!");
+//                            if(shutdownFromESCDetected==false){ //This way, we only trigger shutdownSequence() once
+//                                Serial_println("Shutdown Sequence Triggered");
+//                                shutdownFromESCDetected = true;
+//                                shutdownSequence();
+//
+//                            }
+//
+//                            //shutdown goes here shutdownSequence();
+//                        }
+//                        else{
+//                            Serial_println("Received ESC Ping Message");
+//                        }
+//                        break;
+//                        
+//                    case modeESCID:
+//                        Serial_printlnf("modeESC ID and Data %lx: %x %x %x ", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2]);
+//                                                // Now check the data payload
+//                            //                        if (recCanMsg.data[0] == 0x02) {
+//                            //                            Serial_println("Received Shutdown Command 0x02!");
+//                            //                            if(shutdownFromESCDetected==false){ //This way, we only trigger shutdownSequence() once
+//                            //                                Serial_println("Shutdown Sequence Triggered");
+//                            //                                shutdownFromESCDetected = true;
+//                            //                                shutdownSequence();
+//                            //
+//                            //                            }
+//                            //
+//                            //                            //shutdown goes here shutdownSequence();
+//                            //                        }
+//                            //                        else{
+//                            //                            Serial_println("Received ESC Ping Message");
+//                            //                        }
+//                        break;
+//                    
+//            }
+//        }
         if(CAN1_ReceivedMessageCountGet() > 0){
-            Serial_printlnf("I have a can message");
+            // Serial_printlnf("I have a can message"); // Commented out to reduce spam
         }
+        
+        uint8_t payloadData[8] = {0}; 
         CAN_MSG_OBJ recCanMsg;
-        if(CanReceive(&recCanMsg)){
-            //if(DEBUG_ENABLED) Serial_printlnf("Got a CAN Message %x: %x %x %x %x %x %x %x %x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
-            if(DEBUG_ENABLED) Serial_printlnf("Got a CAN Message %lx: %x %x %x %x %x %x %x %x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
-            switch(recCanMsg.msgId){
-                    case CAN_ID_PING:
-                    // Now check the data payload
-                    if (recCanMsg.data[0] == 0x02) {
-                        Serial_println("Received Shutdown Command 0x02!");
-                        if(shutdownFromESCDetected==false){ //This way, we only trigger shutdownSequence() once
-                            Serial_println("Shutdown Sequence Triggered");
-                            shutdownFromESCDetected = true;
-                            shutdownSequence();
+        
+        // Point the struct to our safe memory array!
+        recCanMsg.data = payloadData; 
+
+        // CHANGE THIS 'if' TO A 'while' TO DRAIN THE FIFO BUFFER COMPLETELY
+        while(CanReceive(&recCanMsg)){
+            
+            // Mask off the Node ID so the switch statement matches perfectly
+            uint32_t maskedID = recCanMsg.msgId & 0xFFFFFFF0;
+            
+            // Only print if it's NOT a Ping message, to keep the terminal clean
+            if(DEBUG_ENABLED && maskedID != pingESCID) {
+                Serial_printlnf("Got a CAN Message %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", 
+                                recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], 
+                                recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], 
+                                recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+            }
+            
+            switch(maskedID){
+                
+                    case versionFromESCID:
+                        if(DEBUG_ENABLED) Serial_printlnf("versionFromESC   ID and Data %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+                        break;
+                        
+                    case registrationStateESCID:
+                        if(DEBUG_ENABLED) Serial_printlnf("registrationStateESC ID and Data %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+                        break;
+                    
+                    case firmwareVersionESCID:
+                        // Uncomment this if you want to see them, but they spam a lot on boot!
+                        //if(DEBUG_ENABLED) Serial_printlnf("[FIRMWARE]  ID and Data %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+                        break;
+                        
+                    case pingESCID:
+                        // Now check the data payload. We only care if the ESC tells us to shut down.
+                        if (recCanMsg.data[0] == 0x02) {
+                            Serial_println("Received Shutdown Command 0x02 !!!");
+                            if(shutdownFromESCDetected==false){ //This way, we only trigger shutdownSequence() once
+                                Serial_println("Shutdown Sequence Triggered");
+                                shutdownFromESCDetected = true;
+                                shutdownSequence();
+                            }
+                        }
+                        // We deleted the "Received ESC Ping Message" to stop the spam!
+                        break;
+                        
+                    case modeESCID:
+                        if(DEBUG_ENABLED) Serial_printlnf("modeESC      ID and Data %08lx: %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2]);
+                        if (recCanMsg.data[1] == 0x15) {
+                            Serial_println("ESC ACKNOWLEDGES 5-BUTTON PRESS");
+                            Serial_println("TURNING BUTTON LED BLUE");
                             
                         }
+                        else if (recCanMsg.data[1] == 0x16) {
+                            Serial_println("ESC HAS ANNOUNCED ENDING PAIRING MODE");
+                            Serial_println("TURNING BUTTON BACK TO PREVIOUS STATE");
+                            
+                        }
+                        break;
                         
-                        //shutdown goes here shutdownSequence();
-                    }
-                    else{
-                        Serial_println("Received ESC Ping Message");
-                    }
-                    break;
+                    // THE CATCH-ALL: This will print ANY message that doesn't match the 5 IDs above
+                    default:
+                        if(DEBUG_ENABLED) Serial_printlnf("[UNKNOWN]   ID and Data %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+                        break;
             }
         }
         
@@ -542,10 +723,14 @@ bool configureBMS(void){
 }
 
 void updateTemperatures(void){
-    Serial_println("Temperatures: ");
-    Serial_printlnf("Sensor 1: %f", bms_GetTemperatureDegC(1));
-    //Serial_printlnf("Sensor 2: %f", bms_GetTemperatureDegC(2));
-    //Serial_printlnf("Sensor 3: %f", bms_GetTemperatureDegC(3));
+    if(verboseTemperatures==true){
+        Serial_println("Temperatures: ");
+        Serial_printlnf("Sensor 1: %f", bms_GetTemperatureDegC(1));
+        //Serial_printlnf("Sensor 2: %f", bms_GetTemperatureDegC(2));
+        //Serial_printlnf("Sensor 3: %f", bms_GetTemperatureDegC(3));
+    
+    }
+    
     
     
 

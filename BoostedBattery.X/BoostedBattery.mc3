@@ -2545,7 +2545,7 @@
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.CustomKey" moduleName="ECAN1" name="message ID"/>
-         <value>271856816x</value>
+         <value>271856704x</value>
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.CustomKey" moduleName="ECAN1" name="receive buffer mode"/>
@@ -4884,6 +4884,86 @@
          <value>FIFO</value>
       </entry>
       <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%1%canFilter"/>
+         <value>Filter 0</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%1%canID"/>
+         <value>0x10024020x</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%1%canIdType"/>
+         <value>EID</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%1%canMask"/>
+         <value>Mask 0</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%1%canReceiveBuffer"/>
+         <value>FIFO</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%2%canFilter"/>
+         <value>Filter 0</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%2%canID"/>
+         <value>0x10343160x</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%2%canIdType"/>
+         <value>EID</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%2%canMask"/>
+         <value>Mask 0</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%2%canReceiveBuffer"/>
+         <value>FIFO</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%3%canFilter"/>
+         <value>Filter 0</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%3%canID"/>
+         <value>0x103b31a0x</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%3%canIdType"/>
+         <value>EID</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%3%canMask"/>
+         <value>Mask 0</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%3%canReceiveBuffer"/>
+         <value>FIFO</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%4%canFilter"/>
+         <value>Filter 0</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%4%canID"/>
+         <value>0x10343440x</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%4%canIdType"/>
+         <value>EID</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%4%canMask"/>
+         <value>Mask 0</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.PropertyTokenKey" moduleName="ECAN1" name="data%4%canReceiveBuffer"/>
+         <value>FIFO</value>
+      </entry>
+      <entry>
          <key class="com.microchip.mcc.core.tokenManager.RegisterKey" moduleName="ECAN1" registerAlias="CBUFPNT1"/>
          <value>65535</value>
       </entry>
@@ -4945,7 +5025,7 @@
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.RegisterKey" moduleName="ECAN1" registerAlias="CRXF0EID"/>
-         <value>13488</value>
+         <value>13376</value>
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.RegisterKey" moduleName="ECAN1" registerAlias="CRXF0SID"/>
@@ -5081,11 +5161,11 @@
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.RegisterKey" moduleName="ECAN1" registerAlias="CRXM0EID"/>
-         <value>65535</value>
+         <value>35343</value>
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.RegisterKey" moduleName="ECAN1" registerAlias="CRXM0SID"/>
-         <value>65507</value>
+         <value>65024</value>
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.RegisterKey" moduleName="ECAN1" registerAlias="CRXM1EID"/>
@@ -5501,7 +5581,7 @@
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.SettingKey" moduleName="ECAN1" registerAlias="CRXF0EID" settingAlias="EID"/>
-         <value>13488</value>
+         <value>13376</value>
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.SettingKey" moduleName="ECAN1" registerAlias="CRXF0SID" settingAlias="EID"/>
@@ -5901,11 +5981,11 @@
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.SettingKey" moduleName="ECAN1" registerAlias="CRXM0EID" settingAlias="EID"/>
-         <value>65535</value>
+         <value>35343</value>
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.SettingKey" moduleName="ECAN1" registerAlias="CRXM0SID" settingAlias="EID"/>
-         <value>3</value>
+         <value>0</value>
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.SettingKey" moduleName="ECAN1" registerAlias="CRXM0SID" settingAlias="MIDE"/>
@@ -5913,7 +5993,7 @@
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.SettingKey" moduleName="ECAN1" registerAlias="CRXM0SID" settingAlias="SID"/>
-         <value>2047</value>
+         <value>2032</value>
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.SettingKey" moduleName="ECAN1" registerAlias="CRXM1EID" settingAlias="EID"/>
@@ -11641,7 +11721,7 @@
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.RegisterKey" moduleName="Pin Module" registerAlias="ANSELB"/>
-         <value>13</value>
+         <value>269</value>
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.RegisterKey" moduleName="Pin Module" registerAlias="ANSELC"/>
@@ -11821,7 +11901,7 @@
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.SettingKey" moduleName="Pin Module" registerAlias="ANSELB" settingAlias="ANSB8"/>
-         <value>digital</value>
+         <value>analog</value>
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.SettingKey" moduleName="Pin Module" registerAlias="ANSELC" settingAlias="ANSC0"/>
@@ -14338,16 +14418,16 @@
          <hash>01684401f2b49e2ca0c850c5690b4090d7f0a10e70a369798d71a591388e1d7b</hash>
       </entry>
       <entry>
-         <file>mcc_generated_files/reset.c</file>
-         <hash>a839f5b00c0886b79c10bb3624e31feba8f47315699054e168af6ad8dea1bb31</hash>
-      </entry>
-      <entry>
          <file>mcc_generated_files/uart1.h</file>
          <hash>ce14c01092e354bebadb2433a4eadb355f600beda90ecb8df2120d6794c76170</hash>
       </entry>
       <entry>
+         <file>mcc_generated_files/reset.c</file>
+         <hash>a839f5b00c0886b79c10bb3624e31feba8f47315699054e168af6ad8dea1bb31</hash>
+      </entry>
+      <entry>
          <file>mcc_generated_files/system.c</file>
-         <hash>9547821ceb58d05a5fe3d48bd2b59f4d90a76601ab38ca0c1f7b559ae09825ed</hash>
+         <hash>6253ad91e8a674120dc9d4476a26aa676ea17b75eb97924f19bcac33523e95c8</hash>
       </entry>
       <entry>
          <file>mcc_generated_files/reset.h</file>
@@ -14355,7 +14435,7 @@
       </entry>
       <entry>
          <file>mcc_generated_files/can1.c</file>
-         <hash>3a5fa3633d7f30dac3611913a8a8c2be951d5c903188da9ccb3858419acb7856</hash>
+         <hash>f3b522ee6a652d6e4d02ba86f2b4803eaf77998b6103fa101fc1582526a06761</hash>
       </entry>
       <entry>
          <file>mcc_generated_files/ext_int.h</file>
@@ -14383,7 +14463,7 @@
       </entry>
       <entry>
          <file>mcc_generated_files/adc1.h</file>
-         <hash>0127b5cc0f56259a434072ed3409f7835983470ee07d9687f7f64a26c6cbdc48</hash>
+         <hash>9b3d2d226ee5145a198026646f4cd2d21c5ecec6a425448b2cf441f08af81712</hash>
       </entry>
       <entry>
          <file>mcc_generated_files/adc_module_features.h</file>
@@ -14395,7 +14475,7 @@
       </entry>
       <entry>
          <file>mcc_generated_files/mcc.h</file>
-         <hash>cb9c09aaf1ff529f8440edfc7c5cd534fd1f476d7d5b3d43f0a5257987aad6e3</hash>
+         <hash>05ab3874d127605fe3462bdc3a6ce2cc553f8c9ff55a37d00b87946dac3d95eb</hash>
       </entry>
       <entry>
          <file>mcc_generated_files/interrupt_manager.c</file>
@@ -14407,7 +14487,7 @@
       </entry>
       <entry>
          <file>mcc_generated_files/pin_manager.c</file>
-         <hash>fd176c6a5ca638eb23c9e5731fb7b428e6040ca8e5a7f35a5f2dcc7e24048b4b</hash>
+         <hash>602faa19a760429b07b609833e1bbd4632af4ac3394365f605c32b734ac37240</hash>
       </entry>
       <entry>
          <file>mcc_generated_files/watchdog.h</file>
@@ -14446,12 +14526,12 @@
          <hash>c67b89a7b830c166d3e80210cd1b68fa95b6676c70d58fe10b55845f33d01929</hash>
       </entry>
       <entry>
-         <file>mcc_generated_files/tmr3.h</file>
-         <hash>acc946bb722619fb52d449cb328ff5e6c8b3f9d49bee29ccfaeafe01b5c9ca34</hash>
-      </entry>
-      <entry>
          <file>mcc_generated_files/traps.h</file>
          <hash>07c261c6820566fd8f4d7812dc8609a0bb3bb84cc76ec539dc69c76097eb678c</hash>
+      </entry>
+      <entry>
+         <file>mcc_generated_files/tmr3.h</file>
+         <hash>acc946bb722619fb52d449cb328ff5e6c8b3f9d49bee29ccfaeafe01b5c9ca34</hash>
       </entry>
       <entry>
          <file>mcc_generated_files/can_types.h</file>
@@ -14462,20 +14542,20 @@
          <hash>6759858613863aa47cfbfddb67b331d64f45ae4824536dc38df5856dda737c76</hash>
       </entry>
       <entry>
-         <file>mcc_generated_files/tmr3.c</file>
-         <hash>83764f4a2b21c57655a2c0cc47d87fbcd60e6c04d45dda462f50a71abc33ef87</hash>
-      </entry>
-      <entry>
          <file>mcc_generated_files/traps.c</file>
          <hash>27f43b20b30baf3e560da99b5c0bb315814d1cf1eed578296bfff0bb123b2b25</hash>
       </entry>
       <entry>
-         <file>mcc_generated_files/dma.c</file>
-         <hash>fd2ee3b35c6d56de0b28fecfce2bf48abc2640f6bd872cba03ea16d4252aefa9</hash>
+         <file>mcc_generated_files/tmr3.c</file>
+         <hash>83764f4a2b21c57655a2c0cc47d87fbcd60e6c04d45dda462f50a71abc33ef87</hash>
       </entry>
       <entry>
          <file>mcc_generated_files/system_types.h</file>
          <hash>a326edcb6eda69b9694227858f052e559cc695af0d8a01ff6d5dd7e583061107</hash>
+      </entry>
+      <entry>
+         <file>mcc_generated_files/dma.c</file>
+         <hash>fd2ee3b35c6d56de0b28fecfce2bf48abc2640f6bd872cba03ea16d4252aefa9</hash>
       </entry>
       <entry>
          <file>mcc_generated_files/i2c1.h</file>

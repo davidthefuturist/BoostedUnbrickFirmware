@@ -248,31 +248,53 @@ void CAN1_Initialize(void)
     /* select acceptance masks for filters */
     C1FMSKSEL1bits.F0MSK = 0x0; //Select Mask 0 for Filter 0
     
-    /* Configure the masks */
-    C1RXM0SIDbits.SID = 0x7ff; 
+//    /* Configure the masks */
+//    C1RXM0SIDbits.SID = 0x7f0; 
+//    C1RXM1SIDbits.SID = 0x0; 
+//    C1RXM2SIDbits.SID = 0x0; 
+//    
+//    C1RXM0SIDbits.EID = 0x0; 
+//    C1RXM1SIDbits.EID = 0x0; 
+//    C1RXM2SIDbits.EID = 0x0; 
+//    
+//    C1RXM0EID = 0x8A0F;     	
+//    C1RXM1EID = 0x00;     	
+//    C1RXM2EID = 0x00;     	
+//    
+//    C1RXM0SIDbits.MIDE = 0x0; 
+//    C1RXM1SIDbits.MIDE = 0x0; 
+//    C1RXM2SIDbits.MIDE = 0x0; 
+//    
+//    /* Configure the filters */
+//    C1RXF0SIDbits.SID = 0x40d; 
+//    
+//    C1RXF0SIDbits.EID = 0x0; 
+//    
+//    C1RXF0EID = 0x3440; 
+//    
+//    C1RXF0SIDbits.EXIDE = 0x0; 
+    
+    
+    /* OVERRIDE: FORCE MASK 0 TO ALL ZEROS (CATCH EVERYTHING) */
+    C1RXM0SIDbits.SID = 0x0; 
     C1RXM1SIDbits.SID = 0x0; 
     C1RXM2SIDbits.SID = 0x0; 
     
-    C1RXM0SIDbits.EID = 0x3; 
+    C1RXM0SIDbits.EID = 0x0; 
     C1RXM1SIDbits.EID = 0x0; 
     C1RXM2SIDbits.EID = 0x0; 
     
-    C1RXM0EID = 0xFFFF;     	
-    C1RXM1EID = 0x00;     	
-    C1RXM2EID = 0x00;     	
+    C1RXM0EID = 0x0000;      
+    C1RXM1EID = 0x0000;      
+    C1RXM2EID = 0x0000;      
     
     C1RXM0SIDbits.MIDE = 0x0; 
-    C1RXM1SIDbits.MIDE = 0x0; 
-    C1RXM2SIDbits.MIDE = 0x0; 
     
-    /* Configure the filters */
-    C1RXF0SIDbits.SID = 0x40d; 
-    
+    /* CONFIGURE FILTER 0 FOR 29-BIT EXTENDED IDs */
+    C1RXF0SIDbits.SID = 0x0; 
     C1RXF0SIDbits.EID = 0x0; 
-    
-    C1RXF0EID = 0x34B0; 
-    
-    C1RXF0SIDbits.EXIDE = 0x0; 
+    C1RXF0EID = 0x0000; 
+    C1RXF0SIDbits.EXIDE = 0x1;
     
     /* FIFO Mode */
     C1BUFPNT1bits.F0BP = 0xf; //Filter 0 uses FIFO
