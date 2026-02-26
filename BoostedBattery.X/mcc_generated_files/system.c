@@ -79,18 +79,18 @@
 #include "system.h"
 #include "system_types.h"
 #include "can1.h"
-#include "tmr3.h"
-#include "tmr2.h"
-#include "tmr1.h"
+#include "memory/flash.h"
 #include "interrupt_manager.h"
 #include "traps.h"
+#include "tmr2.h"
 #include "i2c1.h"
 #include "i2c2.h"
+#include "tmr1.h"
+#include "tmr3.h"
+#include "uart1.h"
 #include "ext_int.h"
-#include "memory/flash.h"
 #include "adc1.h"
 #include "dma.h"
-#include "uart1.h"
 
 void SYSTEM_Initialize(void)
 {
