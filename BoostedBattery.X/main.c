@@ -320,10 +320,134 @@ void balanceMode(void);
 void updateAverageCurrent(void);
 uint64_t millis(void);
 
+
+#include <stdlib.h> // For rand()
+#include "mcc_generated_files/spi1_driver.h" // Includes the SPI exchange functions
+
+// =======================================================================
+// SPI FLASH MEMORY DRIVERS (ISSI IS25LP128)
+// =======================================================================
+
+// Reads the internal Status Register (to check if the chip is busy)
+uint8_t flash_ReadStatus(void) {
+    uint8_t status;
+    IO_RC4_SetLow(); // Pin 37 CS
+    spi1_exchangeByte(0x05); // 0x05 = Read Status Register
+    status = spi1_exchangeByte(0x00);
+    IO_RC4_SetHigh();
+    return status;
+}
+
+// Halts the microcontroller until the Flash chip finishes erasing/writing
+void flash_WaitBusy(void) {
+    // Bit 0 of the Status Register is the Write In Progress (WIP) bit
+    while ((flash_ReadStatus() & 0x01) == 0x01); 
+}
+
+// Unlocks the chip so we can erase or write
+void flash_WriteEnable(void) {
+    IO_RC4_SetLow();
+    spi1_exchangeByte(0x06); // 0x06 = Write Enable (WEL)
+    IO_RC4_SetHigh();
+    flash_WaitBusy(); 
+}
+
+// Erases a 4KB sector (Sets all bytes to 0xFF)
+void flash_EraseSector(uint32_t address) {
+    flash_WriteEnable(); // Must unlock before erasing!
+    
+    IO_RC4_SetLow();
+    spi1_exchangeByte(0x20); // 0x20 = Sector Erase 4KB
+    spi1_exchangeByte((address >> 16) & 0xFF);
+    spi1_exchangeByte((address >> 8) & 0xFF);
+    spi1_exchangeByte(address & 0xFF);
+    IO_RC4_SetHigh();
+    
+    flash_WaitBusy(); // Wait for the erase to physically complete
+}
+
+// Writes a single byte to the flash
+void flash_WriteByte(uint32_t address, uint8_t data) {
+    flash_WriteEnable(); // Must unlock before writing!
+    
+    IO_RC4_SetLow();
+    spi1_exchangeByte(0x02); // 0x02 = Page Program (Write)
+    spi1_exchangeByte((address >> 16) & 0xFF);
+    spi1_exchangeByte((address >> 8) & 0xFF);
+    spi1_exchangeByte(address & 0xFF);
+    spi1_exchangeByte(data); // Send the actual data
+    IO_RC4_SetHigh();
+    
+    flash_WaitBusy(); // Wait for the burn to complete
+}
+
+// Reads a single byte from the flash
+uint8_t flash_ReadByte(uint32_t address) {
+    uint8_t data;
+    flash_WaitBusy(); // Make sure it's not busy before interrupting
+    
+    IO_RC4_SetLow();
+    spi1_exchangeByte(0x03); // 0x03 = Read Data
+    spi1_exchangeByte((address >> 16) & 0xFF);
+    spi1_exchangeByte((address >> 8) & 0xFF);
+    spi1_exchangeByte(address & 0xFF);
+    data = spi1_exchangeByte(0x00); // Send dummy byte to clock the data in
+    IO_RC4_SetHigh();
+    
+    return data;
+}
+
+// =======================================================================
+// THE RANDOM NUMBER PERSISTENCE TEST
+// =======================================================================
+void runFlashPersistenceTest(void) {
+    Serial_println("\n--- SPI FLASH PERSISTENCE TEST ---");
+    
+    // 1. Read JEDEC ID to prove SPI is physically working
+    uint8_t id[3] = {0, 0, 0};
+    IO_RC4_SetLow();
+    spi1_exchangeByte(0x9F); 
+    id[0] = spi1_exchangeByte(0x00);
+    id[1] = spi1_exchangeByte(0x00);
+    id[2] = spi1_exchangeByte(0x00);
+    IO_RC4_SetHigh();
+    Serial_printlnf("Flash JEDEC ID: %02X %02X %02X", id[0], id[1], id[2]);
+
+    // 2. Read the old value to prove it survived the power cycle
+    uint8_t savedValue = flash_ReadByte(0x000000);
+    Serial_printlnf("Value CURRENTLY in Flash: %d", savedValue);
+    
+    
+    // 3. adds 5 to the old value
+    uint8_t newValue = savedValue+5; 
+    
+    // 4. Erase the sector (Crucial step!)
+    Serial_println("Erasing Sector 0...");
+    flash_EraseSector(0x000000);
+    
+    // 5. Write the new value
+    Serial_printlnf("Writing NEW random value: %d...", newValue);
+    flash_WriteByte(0x000000, newValue);
+    
+    // 6. Read it back immediately to verify the hardware works
+    uint8_t verifyValue = flash_ReadByte(0x000000);
+    if (verifyValue == newValue) {
+        Serial_println("Write verified! SPI is working perfectly.");
+        Serial_printlnf(">>> TURN THE BOARD OFF. ON NEXT BOOT, IT SHOULD READ: %d <<<", newValue);
+    } else {
+        Serial_printlnf("ERROR! Write failed. Read back: %d", verifyValue);
+    }
+    Serial_println("----------------------------------\n");
+}
+
 int main(void)
 {
     // initialize the device
     SYSTEM_Initialize();
+    
+    spi1_open(0);
+    
+    
     Serial_begin();
     ADC1_Initialize();
     I2C1_Initialize();
@@ -337,6 +461,7 @@ int main(void)
     CAN1_TransmitEnable();
     CAN1_ReceiveEnable();
     CAN1_OperationModeSet(CAN_CONFIGURATION_MODE);
+    
     
     TMR1_SetInterruptHandler(&tmr_1ms);     //Point at the function for the 1ms tick
     TMR2_SetInterruptHandler(&tmr_50ms);    //Point at the function for the 50ms tick
@@ -399,6 +524,10 @@ int main(void)
             CANInitialized = true;
         }
     }
+    
+    
+    runFlashPersistenceTest();
+    
     
     if(DO_CELL_BALANCING == 1) bms_EnableAutoBalancing();   //Enable cell balancing if config has it enabled
     
@@ -714,7 +843,9 @@ int main(void)
                 // Only print if it's NOT a Ping message, to keep the terminal clean
                 if(DEBUG_ENABLED && maskedID != pingESCID) {
                     Serial_printlnf("Got a CAN Message %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", 
-                                    recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], 
+//                                    recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], 
+                                    maskedID, recCanMsg.data[0], recCanMsg.data[1], 
+                            
                                     recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], 
                                     recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
                 }
@@ -749,7 +880,7 @@ int main(void)
                                 if(shutdownFromESCDetected==false){ //This way, we only trigger shutdownSequence() once
                                     Serial_println("Shutdown Sequence Triggered");
                                     shutdownFromESCDetected = true;
-                                    shutdownSequence();
+//                                    shutdownSequence();
                                 }
                             }
                             // We deleted the "Received ESC Ping Message" to stop the spam!
@@ -1253,7 +1384,7 @@ void mapStatusLED(void){
         }
     }
     else{   //Some kind of BMS or other power system error
-        LED.R = flashValue;
+        LED.R = 255;
         LED.G = 0;
         LED.B = 0;
     }
