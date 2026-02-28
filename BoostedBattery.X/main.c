@@ -108,6 +108,12 @@
 //- preserve braking at low voltage; you have about 5 seconds after remote yells until mosfets turn off 
 
 
+//FIX: CANBUS filters:
+// While loop ALL THE TIME is fundamentally flawed
+// On bootup, only sample version and serial number (SAME CANBUS MESSAGE)
+// After captured, listen for registration state and ping
+// When in pairing mode, only listen for mode IMPLEMENT WHILE LOOP HERE
+
 
 
 
@@ -180,7 +186,7 @@
 
 
 
-#define versionFromESCID 0x10024020
+#define versionFromESCSRID 0x10024020
 
 #define registrationStateESCID 0x10343160
 
@@ -190,6 +196,15 @@
 
 #define modeESCID 0x103B31A0
 
+
+//volatile bool listeningForExitingPairingMode = false;
+volatile bool obtainedSerialNumber = false;
+volatile bool obtainedVersion = false;
+
+
+
+
+
 //Global Timer Flags
 volatile bool updateLED = false;        //Triggers update of the I2C LED chip
 volatile bool updateCAN = false;        //Triggers sending of CAN Bus packets
@@ -198,6 +213,10 @@ volatile bool updateADC = false;        //Triggers querying of ADC channels
 volatile bool updateDebug = false;      //Triggers debug messages printing over UART
 //volatile bool updateTemperatureArray = false; //10/25/25 06:18:56 PM Triggers update of the temperatures
 volatile bool verboseTemperatures = false; 
+
+
+
+
 
 //Global Status Flags
 volatile bool CANInitialized = false;   //Flag to check if CAN Bus has been initialized successfully
@@ -250,6 +269,11 @@ volatile uint8_t canPacketID = 0;
 //LED controller
 volatile LED_ARRAY LED;                         //LED struct instance to control the I2C LED controller
 volatile uint8_t fadeValue = 250;               //Value for brightness of the pixel that is not fully on when doing charge animation
+volatile uint8_t flashValue = 0;               //RLOD Flash Behavior
+volatile uint8_t flashValueCounter = 0;               //RLOD Flash Behavior
+volatile uint8_t flashValueCounterThresholdLong = 10;               //RLOD Flash Behavior
+volatile uint8_t flashValueCounterThresholdQuick = 5;               //RLOD Flash Behavior
+
 volatile bool chargeFadeDirection = false;      //Flag to fade down (false) or up (true)
 volatile bool showingBalancing = false;         //Flag to have SOC leds show SOC or balancing mV
 volatile bool showBalanceComplete = true;       //Flag set true after Differential Balancing blinks finishes the blink sequence. Used to switch back to SOC display
@@ -612,67 +636,147 @@ int main(void)
         
         // Point the struct to our safe memory array!
         recCanMsg.data = payloadData; 
-
+        
+        
         // CHANGE THIS 'if' TO A 'while' TO DRAIN THE FIFO BUFFER COMPLETELY
-        while(CanReceive(&recCanMsg)){
-            
-            // Mask off the Node ID so the switch statement matches perfectly
-            uint32_t maskedID = recCanMsg.msgId & 0xFFFFFFF0;
-            
-            // Only print if it's NOT a Ping message, to keep the terminal clean
-            if(DEBUG_ENABLED && maskedID != pingESCID) {
-                Serial_printlnf("Got a CAN Message %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", 
-                                recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], 
-                                recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], 
-                                recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
-            }
-            
-            switch(maskedID){
-                
-                    case versionFromESCID:
-                        if(DEBUG_ENABLED) Serial_printlnf("versionFromESC   ID and Data %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
-                        break;
-                        
-                    case registrationStateESCID:
-                        if(DEBUG_ENABLED) Serial_printlnf("registrationStateESC ID and Data %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
-                        break;
-                    
-                    case firmwareVersionESCID:
-                        // Uncomment this if you want to see them, but they spam a lot on boot!
-                        //if(DEBUG_ENABLED) Serial_printlnf("[FIRMWARE]  ID and Data %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
-                        break;
-                        
-                    case pingESCID:
-                        // Now check the data payload. We only care if the ESC tells us to shut down.
-                        if (recCanMsg.data[0] == 0x02) {
-                            Serial_println("Received Shutdown Command 0x02 !!!");
-                            if(shutdownFromESCDetected==false){ //This way, we only trigger shutdownSequence() once
-                                Serial_println("Shutdown Sequence Triggered");
-                                shutdownFromESCDetected = true;
-                                shutdownSequence();
+        if(pairingMode == true){
+//        if(listeningForExitingPairingMode == true){
+            while(CanReceive(&recCanMsg) && pairingMode == true){
+
+                // Mask off the Node ID so the switch statement matches perfectly
+                uint32_t maskedID = recCanMsg.msgId & 0xFFFFFFF0;
+
+                // Only print if it's NOT a Ping message, to keep the terminal clean
+                if(DEBUG_ENABLED && maskedID != pingESCID) {
+                    Serial_printlnf("Got a CAN Message %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", 
+                                    recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], 
+                                    recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], 
+                                    recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+                }
+
+                switch(maskedID){ //ONLY PRINT WHEN PAIRING MODE HAS EXITED
+
+//                        case versionFromESCSRID:
+//                            if(DEBUG_ENABLED) Serial_printlnf("versionFromESCSR   ID and Data %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+//                            break;
+//
+//                        case registrationStateESCID:
+//                            if(DEBUG_ENABLED) Serial_printlnf("registrationStateESC ID and Data %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+//                            break;
+//
+//                        case firmwareVersionESCID:
+//                            // Uncomment this if you want to see them, but they spam a lot on boot!
+//                            //if(DEBUG_ENABLED) Serial_printlnf("[FIRMWARE]  ID and Data %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+//                            break;
+//
+//                        case pingESCID:
+//                            // Now check the data payload. We only care if the ESC tells us to shut down.
+//                            if (recCanMsg.data[0] == 0x02) {
+//                                Serial_println("Received Shutdown Command 0x02 !!!");
+//                                if(shutdownFromESCDetected==false){ //This way, we only trigger shutdownSequence() once
+//                                    Serial_println("Shutdown Sequence Triggered");
+//                                    shutdownFromESCDetected = true;
+//                                    shutdownSequence();
+//                                }
+//                            }
+//                            // We deleted the "Received ESC Ping Message" to stop the spam!
+//                            break;
+
+                        case modeESCID:
+                            if(DEBUG_ENABLED) Serial_printlnf("modeESC      ID and Data %08lx: %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2]);
+                            if (recCanMsg.data[1] == 0x15) {
+                                Serial_println("ESC ACKNOWLEDGES 5-BUTTON PRESS");
+                                Serial_println("TURNING BUTTON LED BLUE");
+
                             }
-                        }
-                        // We deleted the "Received ESC Ping Message" to stop the spam!
-                        break;
-                        
-                    case modeESCID:
-                        if(DEBUG_ENABLED) Serial_printlnf("modeESC      ID and Data %08lx: %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2]);
-                        if (recCanMsg.data[1] == 0x15) {
-                            Serial_println("ESC ACKNOWLEDGES 5-BUTTON PRESS");
-                            Serial_println("TURNING BUTTON LED BLUE");
-                            
-                        }
-                        else if (recCanMsg.data[1] == 0x16) {
-                            Serial_println("ESC HAS ANNOUNCED ENDING PAIRING MODE");
-                            Serial_println("TURNING BUTTON BACK TO PREVIOUS STATE");
-                            
-                        }
-                        break;
-                        
-                    // THE CATCH-ALL: This will print ANY message that doesn't match the 5 IDs above
-                    default:
-                        if(DEBUG_ENABLED) Serial_printlnf("[UNKNOWN]   ID and Data %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
-                        break;
+                            else if (recCanMsg.data[1] == 0x16) {
+                                Serial_println("ESC HAS ANNOUNCED ENDING PAIRING MODE");
+                                Serial_println("TURNING BUTTON BACK TO PREVIOUS STATE");
+//                                listeningForExitingPairingMode = false;
+                                pairingMode = false;
+
+                            }
+                            break;
+
+//                        // THE CATCH-ALL: This will print ANY message that doesn't match the 5 IDs above
+//                        default:
+//                            if(DEBUG_ENABLED) Serial_printlnf("[UNKNOWN]   ID and Data %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+//                            break;
+                }
+            }
+        }
+        else{
+            if(CanReceive(&recCanMsg)){
+
+                // Mask off the Node ID so the switch statement matches perfectly
+                uint32_t maskedID = recCanMsg.msgId & 0xFFFFFFF0;
+
+                // Only print if it's NOT a Ping message, to keep the terminal clean
+                if(DEBUG_ENABLED && maskedID != pingESCID) {
+                    Serial_printlnf("Got a CAN Message %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", 
+                                    recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], 
+                                    recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], 
+                                    recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+                }
+
+                switch(maskedID){
+
+                        case versionFromESCSRID:
+                            if(obtainedSerialNumber == false && obtainedVersion == false){
+                                if(DEBUG_ENABLED) Serial_printlnf("versionFromESCSR   ID and Data %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+                                    obtainedSerialNumber = true;
+                                    obtainedVersion = true;
+                                break;
+                            }
+
+                        case registrationStateESCID:
+                            if(DEBUG_ENABLED) Serial_printlnf("registrationStateESC ID and Data %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+                            break;
+
+                        case firmwareVersionESCID:
+                            if(obtainedSerialNumber == false && obtainedVersion == false){
+                                // Uncomment this if you want to see them, but they spam a lot on boot!
+                                if(DEBUG_ENABLED) Serial_printlnf("[FIRMWARE]  ID and Data %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+                                    obtainedSerialNumber = true;
+                                    obtainedVersion = true;
+                                break;
+                            }
+
+                        case pingESCID:
+                            // Now check the data payload. We only care if the ESC tells us to shut down.
+                            if (recCanMsg.data[0] == 0x02) {
+                                Serial_println("Received Shutdown Command 0x02 !!!");
+                                if(shutdownFromESCDetected==false){ //This way, we only trigger shutdownSequence() once
+                                    Serial_println("Shutdown Sequence Triggered");
+                                    shutdownFromESCDetected = true;
+                                    shutdownSequence();
+                                }
+                            }
+                            // We deleted the "Received ESC Ping Message" to stop the spam!
+                            break;
+
+                        case modeESCID:
+                            if(DEBUG_ENABLED) Serial_printlnf("modeESC      ID and Data %08lx: %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2]);
+                            if (recCanMsg.data[1] == 0x15) {
+                                Serial_println("ESC ACKNOWLEDGES 5-BUTTON PRESS");
+                                Serial_println("TURNING BUTTON LED BLUE");
+//                                listeningForExitingPairingMode = true;
+                                pairingMode = true;
+                                
+
+                            }
+                            else if (recCanMsg.data[1] == 0x16) {
+                                Serial_println("ESC HAS ANNOUNCED ENDING PAIRING MODE");
+                                Serial_println("TURNING BUTTON BACK TO PREVIOUS STATE");
+
+                            }
+                            break;
+
+                        // THE CATCH-ALL: This will print ANY message that doesn't match the 5 IDs above
+                        default:
+                            if(DEBUG_ENABLED) Serial_printlnf("[UNKNOWN]   ID and Data %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
+                            break;
+                }
             }
         }
         
@@ -681,7 +785,7 @@ int main(void)
             buttonReady = false;
             
             if(buttonCount == 5){
-                pairingMode = true;
+//                pairingMode = true;
                 sendButtonStatePacket();
             }
             else if(buttonCount == 6){   //For 6 button presses, go into programming mode. Use this so you don't end up with the BMS in a weird state
@@ -806,8 +910,8 @@ void updateTemperatures(void){
     if(verboseTemperatures==true){
         Serial_println("Temperatures: ");
         Serial_printlnf("Sensor 1: %f", bms_GetTemperatureDegC(1));
-        //Serial_printlnf("Sensor 2: %f", bms_GetTemperatureDegC(2));
-        //Serial_printlnf("Sensor 3: %f", bms_GetTemperatureDegC(3));
+        Serial_printlnf("Sensor 2: %f", bms_GetTemperatureDegC(2));
+        Serial_printlnf("Sensor 3: %f", bms_GetTemperatureDegC(3));
     
     }
     
@@ -1131,13 +1235,15 @@ void mapStatusLED(void){
             LED.B = 255;
         }
         else if(chargerConnected && chargingEnabled){   //Currently charging the battery - fade red
-            LED.R = fadeValue;
+            //LED.R = fadeValue; Changed to 255 to better reflect stock XR behavior
+            LED.R = 255;
             LED.G = 0;
             LED.B = 0;
         }
         else if(chargerConnected && !chargingEnabled){  //Finished charging the battery - fade green
             LED.R = 0;
-            LED.G = fadeValue;
+            //LED.G = fadeValue; Changed to 255 to better reflect stock XR behavior
+            LED.G = 255;
             LED.B = 0;
         }
         else{
@@ -1147,7 +1253,7 @@ void mapStatusLED(void){
         }
     }
     else{   //Some kind of BMS or other power system error
-        LED.R = 255;
+        LED.R = flashValue;
         LED.G = 0;
         LED.B = 0;
     }
@@ -1382,6 +1488,26 @@ void tmr_10ms(void){
 void tmr_50ms(void){
     updateLED = true;                       //Trigger LED array updating
     bms_interval += 1;                      //Update interval counter for BMS updating
+    if(flashValueCounter  < flashValueCounterThresholdLong){
+        
+        
+        
+        flashValueCounter = flashValue + 1;
+        
+    }
+    else{
+        
+        if(flashValue == 0){
+            flashValue = 255;
+        }
+        else{
+            flashValue = 0;
+        }
+        
+        flashValueCounter = 0;
+            
+    }
+    
     if(bms_interval >= 5){                  //Trigger BMS update every 5 ticks (250ms) and reset the interval counter
         lowBattFlasher = ~lowBattFlasher;   //Every 250ms I'm also updating the LED indicator when we're at 0% SOC. Goes from 0->255->0->repeat
         updateBMS = true;                   //Main loop will read this flag
