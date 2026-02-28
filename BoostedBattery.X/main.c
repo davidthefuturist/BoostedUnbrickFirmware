@@ -97,6 +97,86 @@
 #define BATT_CURR_AVG_COUNT     40      //Number of elements in battery current averaging array
 
 
+//Wishlist
+//ESC 2.1.9 and greater:
+//- no reduced brakes
+//- reduction in braking and acceleration during high temp
+//- built-in Amnesia
+//
+//ESC Before 2.1.9:
+//- reduce oscillation of performance based on voltage; this seems to be related to voltage, but will need confirmation. the closer cells get to 2.5v, the more ESCs will limit power
+//- preserve braking at low voltage; you have about 5 seconds after remote yells until mosfets turn off 
+
+
+
+
+
+
+
+// Let's also initiate amp hour counting
+//Two approximation strategies (try both)
+//
+//
+//
+//   Before I get too confused, there's probably some really basic clarifications that need to be instituted:
+//           [Accumulated Amp Hours] should be recorded all the time
+//           [SOC Denominator] is determined by from averaging [Accumulated Amp Hours] when the pack has been discharged 3 times, specifically when the lowest cell is below 3100mV or whatever the EMPTY_CELL_MV is specified as.
+//           [SOC Numerator] is the same value as [SOC Denominator] when the highest cell is 4000mV or whatever the MAX_CELL_CHG is specified as. 
+//           Occasionally, here's how SOC Numerator gets updated: [SOC Numerator] = [SOC Numerator]-[Accumulated Amp Hours]*[Discharge Constant] *Discharge constant is 1 at the moment
+//           [SOC Numerator] is 0 when the lowest cell is 3100mV or whatever the EMPTY_CELL_MV is specified as. 
+//
+//
+//
+//Strategy 1: (close to XR stock behavior) 
+// - Count amp hours 
+// - Record accumulated amp hours when lowest cell is below EMPTY_CELL_MV
+// - Update SOC denominator with accumulated amp hour value after 2-3 full discharges
+// SOC = SOC numerator / SOC denominator
+
+
+
+
+
+//Strategy 2: (voltage interpolation and amp hour counting)
+
+
+
+// - Count amp hours
+// - Record accumulated amp hours when lowest cell is below EMPTY_CELL_MV
+// - Update SOC denominator with accumulated amp hour value after 2-3 full discharges
+// SOC = SOC numerator / SOC denominator
+
+// NEW STUFF: On bootup, read minimum cell voltage and interpolate based off known SOC denominator; 
+//   if 100% is 3900mV and 0% is 3100mV and the total measured capacity is 3500mah, and we are currently reading 3500mv at the lowest cell, 
+//   the numerator should start in between 0 and 3500, but NOT at 3500. 
+//   Current XR battery firmware WILL start at 3500 even though the lowest cell is NOT at 3900mv on bootup
+
+// NEW STUFF: SOC numerator should take into account lowest cell voltage.
+//   If the SOC numerator is approaching 0 but lowest cell is NOT sufficiently close enough to 3100mV, the rate of SOC numerator dropping should decelerate proportionally 
+//   BIG QUESTIONS: 
+//           How close does the SOC numerator have to approach 0?
+//           What does "sufficiently close enough to 3100mV" even mean?
+//           What sort of proportionality should the SOC numerator rate of dropping be?
+//
+
+
+
+//// --- ADJUSTED SOC (HEALING) GLOBALS --- Let's comment this all out for now.
+//#define HEALTHY_DELTA_THRESHOLD 100
+//#define COMPENSATION_CONSTANT 5.0 
+//
+//volatile float adjustedSOC = 0;
+//volatile float adjustedSOCBacktick = 0;
+//volatile bool adjustedSOCImprovement = false;
+//// --------------------------------------
+
+
+
+//SOC Approach 1:
+
+
+
+
 
 
 
