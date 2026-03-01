@@ -96,8 +96,8 @@
    </usedClasses>
    <usedLibraries class="java.util.ArrayList">
       <ILibraryFile class="com.microchip.mcc.core.library.BaseLibraryFile" libraryClass="com.microchip.mcc.mcu16.Mcu16PeripheralLibrary" version="1.171.4"/>
-      <ILibraryFile class="com.microchip.mcc.core.library.BaseLibraryFile" libraryClass="com.microchip.mcc.boardsupportlibrary.BoardSuppportLibrary" version="1.12.0"/>
       <ILibraryFile class="com.microchip.mcc.core.library.BaseLibraryFile" libraryClass="com.microchip.mcc.foundationservices.library.FoundationServicesLibrary" version="0.2.3"/>
+      <ILibraryFile class="com.microchip.mcc.core.library.BaseLibraryFile" libraryClass="com.microchip.mcc.boardsupportlibrary.BoardSuppportLibrary" version="1.12.0"/>
    </usedLibraries>
    <tokenMap class="java.util.TreeMap">
       <entry>
@@ -9318,19 +9318,19 @@
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.CustomKey" moduleName="Pin Module" name="SCL%aux1"/>
-         <value>OFF</value>
+         <value>ON</value>
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.CustomKey" moduleName="Pin Module" name="SCL%aux3"/>
-         <value>ON</value>
-      </entry>
-      <entry>
-         <key class="com.microchip.mcc.core.tokenManager.CustomKey" moduleName="Pin Module" name="SDA%aux0"/>
          <value>OFF</value>
       </entry>
       <entry>
-         <key class="com.microchip.mcc.core.tokenManager.CustomKey" moduleName="Pin Module" name="SDA%aux2"/>
+         <key class="com.microchip.mcc.core.tokenManager.CustomKey" moduleName="Pin Module" name="SDA%aux0"/>
          <value>ON</value>
+      </entry>
+      <entry>
+         <key class="com.microchip.mcc.core.tokenManager.CustomKey" moduleName="Pin Module" name="SDA%aux2"/>
+         <value>OFF</value>
       </entry>
       <entry>
          <key class="com.microchip.mcc.core.tokenManager.CustomKey" moduleName="Pin Module" name="anselUserSetRA0"/>
@@ -14860,7 +14860,7 @@
       </entry>
       <entry>
          <file>mcc_generated_files/system.c</file>
-         <hash>9b23352933e7ff854f53d7cefc9cfb20894c4430bdcdf4b71bf1e9e6d0a08d18</hash>
+         <hash>6384cd7765dfa2f9c40fa33af098b56158133ec6b42aa06411790a00a85639f5</hash>
       </entry>
       <entry>
          <file>mcc_generated_files/reset.h</file>
@@ -14900,7 +14900,7 @@
       </entry>
       <entry>
          <file>mcc_generated_files/adc1.h</file>
-         <hash>79479e15151db69f05c2516667049fd80b8e75ec6b0a3fb1960db1f2278bc074</hash>
+         <hash>1968079d80efd2560faa42e7e564b912f3b34c27dcd60e227efc0faabe98c1be</hash>
       </entry>
       <entry>
          <file>mcc_generated_files/adc_module_features.h</file>
@@ -14912,7 +14912,7 @@
       </entry>
       <entry>
          <file>mcc_generated_files/mcc.h</file>
-         <hash>1e7f1c860d363567532fd707966911ab2731ed16eae2009a961071ee514699c4</hash>
+         <hash>3fc25a46f6394095fb3c13dfed16d39fa6a2391625b283924d29b3cefcb8c7c7</hash>
       </entry>
       <entry>
          <file>mcc_generated_files/interrupt_manager.c</file>
@@ -14924,7 +14924,7 @@
       </entry>
       <entry>
          <file>mcc_generated_files/pin_manager.c</file>
-         <hash>f78444bc68b3aa9b5c7c12585b2cccbdaade4c45c5720cabe14090477328673a</hash>
+         <hash>448645288d8f96e4681ab97f002c99132bc75b09b8ab90f0973a84c6c49901ba</hash>
       </entry>
       <entry>
          <file>mcc_generated_files/watchdog.h</file>
@@ -14939,12 +14939,12 @@
          <hash>b3ee97fe62c298620596d916f346ee0625fb01dafe483b645869295b18983ed6</hash>
       </entry>
       <entry>
-         <file>mcc_generated_files/can_module_features.h</file>
-         <hash>6e279ece86920a544c552c3c90a711856cd6d339772277b1234961472b8f0ef9</hash>
-      </entry>
-      <entry>
          <file>mcc_generated_files/dma.h</file>
          <hash>477c812be3c714d15402d69e63109ddc265534bd405a5b97b1f780aa5934beba</hash>
+      </entry>
+      <entry>
+         <file>mcc_generated_files/can_module_features.h</file>
+         <hash>6e279ece86920a544c552c3c90a711856cd6d339772277b1234961472b8f0ef9</hash>
       </entry>
       <entry>
          <file>main.c</file>

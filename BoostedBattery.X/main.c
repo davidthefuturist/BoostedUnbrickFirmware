@@ -69,7 +69,8 @@
 #define DEBUG_ENABLED           true       //Enables serial printing of all messages
 #define CELL_COUNT              13      //Number of cells in pack
 //#define MIN_CELL_MV             3300    //Cell cutoff voltage
-#define MIN_CELL_MV             3100    //10/25/25 05:53:30 PM Changed to 3100 to more closely match B2XR behavior
+//#define MIN_CELL_MV             3100    //10/25/25 05:53:30 PM Changed to 3100 to more closely match B2XR behavior
+#define MIN_CELL_MV             3000    // Set to 3000 for testing purposes lmao
 //#define LIMP_CELL_MV            3000    //Cell cutoff voltage in limp mode
 #define LIMP_CELL_MV            2900    //10/25/25 05:54:27 PM Changed to 2900 to match LG HG2 minimum voltage (Actual HARD cutoff is about 2800mV)
 //#define EMPTY_CELL_MV           3500    //Millivolts to conisder cell fully discharged under no load
@@ -398,7 +399,7 @@ uint8_t flash_ReadByte(uint32_t address) {
 }
 
 // =======================================================================
-// THE RANDOM NUMBER PERSISTENCE TEST
+// NUMBER PERSISTENCE TEST
 // =======================================================================
 void runFlashPersistenceTest(void) {
     Serial_println("\n--- SPI FLASH PERSISTENCE TEST ---");
@@ -426,7 +427,7 @@ void runFlashPersistenceTest(void) {
     flash_EraseSector(0x000000);
     
     // 5. Write the new value
-    Serial_printlnf("Writing NEW random value: %d...", newValue);
+    Serial_printlnf("Writing value: %d...", newValue);
     flash_WriteByte(0x000000, newValue);
     
     // 6. Read it back immediately to verify the hardware works
@@ -537,6 +538,9 @@ int main(void)
     chargingEnabled = bms_EnableCharging();                 //Try enabling charging
     powerGood = chargingEnabled && dischargingEnabled;      //If both charging and discharging were enabled, then we should be able to operate the ESC
     
+    
+    if(DEBUG_ENABLED) Serial_printlnf("powerGood = chargingEnabled && dischargingEnabled; powerGood = %s", powerGood ? "true" : "false");
+    
     IO_RA7_SetLow();    //Turn off precharge for the capacitors in the ESC
     if(DEBUG_ENABLED) Serial_println("Turning off precharge!");
         
@@ -605,6 +609,9 @@ int main(void)
         }
         
         if(updateDebug && DEBUG_ENABLED){   //Debug message of voltages of all channels on the BMS, currents, and cell balancing status
+            
+            Serial_printlnf("powerGood: %s", powerGood ? "true" : "false");
+            
             Serial_printlnf("Overall Voltage: %0.3fV", bms_GetBatteryVoltage()/1000.0);
             Serial_printlnf("Pack Current: %0.3fA, BMS Current: %0.3fA", batteryCurrentADC, batteryCurrentBMS);
             for(int i = 1; i <= 15; i++){
@@ -857,8 +864,9 @@ int main(void)
                                 if(DEBUG_ENABLED) Serial_printlnf("versionFromESCSR   ID and Data %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
                                     obtainedSerialNumber = true;
                                     obtainedVersion = true;
-                                break;
+                                
                             }
+                            break;
 
                         case registrationStateESCID:
                             if(DEBUG_ENABLED) Serial_printlnf("registrationStateESC ID and Data %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
@@ -870,8 +878,9 @@ int main(void)
                                 if(DEBUG_ENABLED) Serial_printlnf("[FIRMWARE]  ID and Data %08lx: %02x %02x %02x %02x %02x %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2], recCanMsg.data[3], recCanMsg.data[4], recCanMsg.data[5], recCanMsg.data[6], recCanMsg.data[7]);
                                     obtainedSerialNumber = true;
                                     obtainedVersion = true;
-                                break;
+                                
                             }
+                            break;
 
                         case pingESCID:
                             // Now check the data payload. We only care if the ESC tells us to shut down.

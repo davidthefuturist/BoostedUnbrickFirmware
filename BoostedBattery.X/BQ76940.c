@@ -574,10 +574,25 @@ bool bms_EnableDischarging()
 {
     bool succeeded = true;
   Serial_println("enableDischarging");
+  
+  Serial_printlnf("cellVoltages[idCellMinVoltage] > minCellVoltage: %s", cellVoltages[idCellMinVoltage] > minCellVoltage ? "true" : "false");
+  Serial_printlnf("temperatures[0] < maxCellTempDischarge: %s", temperatures[0] < maxCellTempDischarge ? "true" : "false");  
+  Serial_printlnf("temperatures[0] > minCellTempDischarge: %s", temperatures[0] > minCellTempDischarge ? "true" : "false");  
+  
+  
+  
+  
+  
+  
   if (bms_CheckStatus() == 0 &&
     cellVoltages[idCellMinVoltage] > minCellVoltage &&
     temperatures[0] < maxCellTempDischarge &&
     temperatures[0] > minCellTempDischarge)
+      
+    
+      
+      
+      
   {
     uint8_t sys_ctrl2;
     sys_ctrl2 = bms_ReadRegister(SYS_CTRL2, &succeeded);
@@ -587,10 +602,13 @@ bool bms_EnableDischarging()
   }
   else {
     Serial_println("enableDischarging: failed");
-//    Serial_println(idCellMinVoltage);
-//    Serial_println(cellVoltages[idCellMinVoltage] > minCellVoltage);
-//    Serial_println(temperatures[0] < maxCellTempDischarge);
-//    Serial_println(temperatures[0] > minCellTempDischarge);
+    Serial_println(idCellMinVoltage);
+    Serial_println(cellVoltages[idCellMinVoltage] > minCellVoltage);
+    Serial_println(temperatures[0] < maxCellTempDischarge);
+    Serial_println(temperatures[0] > minCellTempDischarge);
+    
+    
+    
     return false;
   }
 }
