@@ -280,6 +280,9 @@ volatile bool showingBalancing = false;         //Flag to have SOC leds show SOC
 volatile bool showBalanceComplete = true;       //Flag set true after Differential Balancing blinks finishes the blink sequence. Used to switch back to SOC display
 volatile uint8_t lowBattFlasher = 0;            //Value for brightness of the first pixel in the series of 5. Used to blink when SOC is low.
 
+volatile uint8_t bmsUpdateInterval = 5; // Update BMS every 5 ticks
+
+
 //Button variables
 volatile bool buttonRead = false;               //Polled state of main button
 volatile uint64_t lastButtonTime = 0;           //Timestamp in ms of when button was last pressed. Used for debouncing
@@ -441,6 +444,163 @@ void runFlashPersistenceTest(void) {
     Serial_println("----------------------------------\n");
 }
 
+
+
+
+
+// =======================================================================
+// FLOAT READ/WRITE WRAPPERS
+// =======================================================================
+
+// A union allows us to look at the exact same 4 bytes of memory 
+// as both a single float AND an array of 4 individual bytes.
+typedef union {
+    float floatValue;
+    uint8_t bytes[4];
+} FloatUnion;
+
+
+// Erases a sector and saves a 4-byte float to it
+void flash_WriteFloat(uint32_t sectorAddress, float value) {
+    FloatUnion data;
+    data.floatValue = value;
+    
+    // 1. Erase the 4KB sector (Crucial before writing!)
+    flash_EraseSector(sectorAddress);
+    
+    // 2. Write the 4 bytes sequentially into the flash
+    for (int i = 0; i < 4; i++) {
+        flash_WriteByte(sectorAddress + i, data.bytes[i]);
+    }
+}
+
+
+// Reads 4 bytes from a sector and reconstructs the float
+float flash_ReadFloat(uint32_t address) {
+    FloatUnion data;
+    
+    // 1. Read the 4 bytes sequentially
+    for (int i = 0; i < 4; i++) {
+        data.bytes[i] = flash_ReadByte(address + i);
+    }
+    
+    // 2. FAILSAFE: A brand new or erased flash chip reads as 0xFF.
+    // 0xFFFFFFFF evaluates to NaN (Not a Number) as a float, which breaks math.
+    if (data.bytes[0] == 0xFF && data.bytes[1] == 0xFF && 
+        data.bytes[2] == 0xFF && data.bytes[3] == 0xFF) {
+        return -1.0; // Return a specifically impossible capacity so main() knows it's blank
+    }
+    
+    return data.floatValue;
+}
+
+
+volatile uint32_t SOCDenominatorAddress = 0x003000;
+volatile float SOCDenominator = 0; //Default value
+volatile float SOCNumerator = 0; 
+
+
+
+volatile uint32_t AccumulatedAmpHoursAddress = 0x001000;
+volatile float AccumulatedAmpHours = 0;
+volatile float InstantaneousAmpHours = 0;
+
+
+// =======================================================================
+//LGHG2 Voltage Curve Linear Interpolation - Taken from XR discharge testing (kinda approximated)
+    // Voltage -> Percentage
+    // 3900 -> 100%
+    // 3750 -> 90%
+    // 3700 -> 80%
+    // 3600 -> 70%
+    // 3550 -> 60%
+    // 3500 -> 50%
+    // 3450 -> 40%
+    // 3400 -> 30%
+    // 3250 -> 20%
+    // 3100 -> 10%
+    // 3000 -> 0%
+    //
+    // Basic interpolation logic: 
+    //  Let's say lowest cell is at 3475 where x is our input voltage and y is our interpolated SOC.
+    // y = mx + b
+    // y = m(3475) + b
+    // Since we have two points, we can solve for m and b.
+    // 3500 -> 50% is our upper bound for voltage and percentage [voltageUpperBound] [percentageUpperBound]
+    // 3450 -> 40% is our lower bound for voltage and percentage [voltageLowerBound] [percentageLowerBound]
+    // In this case:
+    // 
+    // 50% = m(3500) + b
+    // 40% = m(3450) + b
+    // 
+    // m = (50% - b )/ 3500
+    // m = (40% - b )/ 3450
+    // (50% - b )/ 3500 = (40% - b )/ 3450
+    // 50% / 3500 - b / 3500 = 40% / 3450 - b / 3450
+    // -b / 3500 + b / 3450 = 40% / 3450 - 50% / 3500
+    // b * ( -1/ 3500 + 1 / 3450) = 40% / 3450 - 50% / 3500
+    // b =( 40% / 3450 - 50% / 3500 ) / ( -1/ 3500 + 1 / 3450)
+    // 
+    // b general solve is:
+    // b = (percentageLowerBound / voltageLowerBound - percentageUpperBound / voltageUpperBound) / (-1/voltageUpperBound + 1/voltageLowerBound)
+    // 
+    // m general solve is: 
+    // m = (percentageUpperBound - b) / voltageUpperBound
+    //   or 
+    // m = (percentageLowerBound - b) / voltageLowerBound
+    // 
+// =======================================================================
+
+
+
+int interpolateBasedOnVoltage(int lowestCellVoltage) {
+    // Do not interpolate boundaries
+    if (lowestCellVoltage >= 3900) return 100;
+    if (lowestCellVoltage <= 3000) return 0;
+
+    // Lithium Ion Curve Data Arrays (Mapped from lowest to highest)
+    const int curve_V[]   = {3000, 3100, 3250, 3400, 3450, 3500, 3550, 3600, 3700, 3750, 3900};
+    const int curve_SOC[] = {0,    10,   20,   30,   40,   50,   60,   70,   80,   90,   100};
+    const int numPoints = 11;
+
+    // Loop through to find which "bucket" our voltage falls into
+    for (int i = 0; i < numPoints - 1; i++) {
+        if (lowestCellVoltage >= curve_V[i] && lowestCellVoltage < curve_V[i+1]) {
+            
+            // Define upper/lower bounds
+            int voltageLowerBound = curve_V[i];
+            int voltageUpperBound = curve_V[i+1];
+            int percentageLowerBound = curve_SOC[i];
+            int percentageUpperBound = curve_SOC[i+1];
+
+            // Calculate the Point-Slope Interpolation
+            float interpolatedSOC = percentageLowerBound + ((float)(lowestCellVoltage - voltageLowerBound) * (percentageUpperBound - percentageLowerBound)) / (voltageUpperBound - voltageLowerBound);
+            
+            return (int)interpolatedSOC;
+        }
+    }
+    return 0; // Failsafe, should never be hit
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 int main(void)
 {
     // initialize the device
@@ -527,7 +687,9 @@ int main(void)
     }
     
     
-    runFlashPersistenceTest();
+    //runFlashPersistenceTest();
+    
+    
     
     
     if(DO_CELL_BALANCING == 1) bms_EnableAutoBalancing();   //Enable cell balancing if config has it enabled
@@ -540,11 +702,38 @@ int main(void)
     
     
     if(DEBUG_ENABLED) Serial_printlnf("powerGood = chargingEnabled && dischargingEnabled; powerGood = %s", powerGood ? "true" : "false");
+    AccumulatedAmpHours = flash_ReadFloat(AccumulatedAmpHoursAddress);
+    if(DEBUG_ENABLED) Serial_printlnf(">>> Since last at 100%, we have discharged: %f mAh <<<", (double)AccumulatedAmpHours);
+    
+    
+    SOCDenominator = flash_ReadFloat(SOCDenominatorAddress);
+    if(SOCDenominator < 2000){
+        SOCDenominator = 2000; //Set to 2000 if saved value is less than 2000
+    }
+    
+    
+    if(DEBUG_ENABLED) Serial_printlnf("flash_ReadFloat(SOCDenominatorAddress): %d  ", (int)flash_ReadFloat(SOCDenominatorAddress));
+    if(DEBUG_ENABLED) Serial_printlnf("SOC Denominator: %d mAh", (int)SOCDenominator);
+    
+    
+    
     
     IO_RA7_SetLow();    //Turn off precharge for the capacitors in the ESC
     if(DEBUG_ENABLED) Serial_println("Turning off precharge!");
         
     if(EMULATE_XRB == false) beginCANBusSRB();      //SRB has four packets sent once on startup
+    
+    
+    
+    
+//    interpolateBasedOnVoltage(bms_GetMinCellVoltage());
+    if(DEBUG_ENABLED) Serial_printlnf("bms_GetMinCellVoltage: %d volts ", bms_GetMinCellVoltage());
+    if(DEBUG_ENABLED) Serial_printlnf("interpolateBasedOnVoltage(bms_GetMinCellVoltage()): %d%% ", interpolateBasedOnVoltage(bms_GetMinCellVoltage()));
+    // Maybe we SHOULD NOT always interpolate based off voltage on bootup, but only when there is a discrepancy based on the lowest cell voltage?
+    
+    
+    SOCNumerator = ((float)interpolateBasedOnVoltage(bms_GetMinCellVoltage())/100) * SOCDenominator;
+    if(DEBUG_ENABLED) Serial_printlnf("Setting SOC Numerator To: %d ", (int)SOCNumerator);
     
     while (running) //Main loop, sits here until we want to power off the battery
     {
@@ -560,6 +749,22 @@ int main(void)
         if(updateBMS){  //Check if timer set flag to fetch statuses from BMS. Every 250ms (5 ticks of 50ms timer).
             bms_Update();   //Reads status register, voltages, current, etc from BMS
             batteryCurrentBMS = (float)bms_GetBatteryCurrent()/-1000.0; //Get current in amps from the BMS
+            
+            
+            
+            if(DEBUG_ENABLED) Serial_printlnf("bms_GetMinCellVoltage: %d volts ", bms_GetMinCellVoltage());
+            
+            
+            //InstantaneousAmpHours = batteryCurrentBMS * ((bmsUpdateInterval*50) / 1000 ) * (1/3600); 
+            InstantaneousAmpHours = batteryCurrentBMS * ((bmsUpdateInterval * 50.0) / 1000.0 ) * (1.0 / 3600.0);
+            if(DEBUG_ENABLED) Serial_printlnf("Instantaneous Discharge Current: %f mA ", (double)batteryCurrentBMS);
+            if(DEBUG_ENABLED) Serial_printlnf("Instantaneous Amp Hours in a %f millisecond window: %f mAh ", (float)(bmsUpdateInterval*50),(double)InstantaneousAmpHours);
+            
+            
+            AccumulatedAmpHours = AccumulatedAmpHours + InstantaneousAmpHours;
+            
+            
+            
             chargeCurrentDetected = (batteryCurrentBMS <= CHARGE_CURRENT_THR);  //Check if we're charging
             updateSOC();    //Update the state of charge based on the voltage measured by the BMS
             updateTemperatures(); //10/25/25 06:23:30 PM Update temperature at the same time as SOC
@@ -972,6 +1177,14 @@ int main(void)
 }
 
 void shutdownSequence(void){
+    
+    
+    Serial_println("Saving Accumulated Amp Hours to Flash...");
+    if(DEBUG_ENABLED) Serial_printlnf(">>> Since last at 100%, we have discharged: %f mAh <<<", AccumulatedAmpHours);
+    flash_WriteFloat(AccumulatedAmpHoursAddress, AccumulatedAmpHours);
+    
+    AccumulatedAmpHours = flash_ReadFloat(AccumulatedAmpHoursAddress);
+    if(DEBUG_ENABLED) Serial_printlnf(">>> Verification: %f mAh <<<", AccumulatedAmpHours);
     
     bms_DisableDischarging();   //Disconnect battery from speed controller
     bms_DisableCharging();
@@ -1648,7 +1861,7 @@ void tmr_50ms(void){
             
     }
     
-    if(bms_interval >= 5){                  //Trigger BMS update every 5 ticks (250ms) and reset the interval counter
+    if(bms_interval >= bmsUpdateInterval){                  //Trigger BMS update every 5 ticks (250ms) and reset the interval counter
         lowBattFlasher = ~lowBattFlasher;   //Every 250ms I'm also updating the LED indicator when we're at 0% SOC. Goes from 0->255->0->repeat
         updateBMS = true;                   //Main loop will read this flag
         bms_interval = 0;                   //Reset our interval
