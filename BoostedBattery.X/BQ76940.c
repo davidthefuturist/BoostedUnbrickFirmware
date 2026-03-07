@@ -585,7 +585,7 @@ bool bms_EnableDischarging()
   
   
   if (bms_CheckStatus() == 0 &&
-    cellVoltages[idCellMinVoltage] > minCellVoltage &&
+    cellVoltages[idCellMinVoltage] > minCellVoltage && 
     temperatures[0] < maxCellTempDischarge &&
     temperatures[0] > minCellTempDischarge)
       

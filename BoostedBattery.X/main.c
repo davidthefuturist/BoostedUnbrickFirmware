@@ -225,6 +225,28 @@ volatile bool BMSInitialized = false;   //Flag to check if BMS Controller has be
 volatile bool LEDInitialized = false;   //Flag to check if I2C LED Controller has been initialized successfully
 volatile bool ADCInitialized = false;   //Flag to check if ADC has been initialized successfully
 
+
+
+//Temperature Limit Globals
+volatile int minDischarge_degC = 0;
+volatile int warning_minDischarge_degC = 10; 
+volatile int warning_maxDischarge_degC = 50; 
+volatile int maxDischarge_degC = 60;
+
+volatile int minCharge_degC = 0;
+volatile int warning_minCharge_degC = 10; 
+volatile int warning_maxCharge_degC = 40; 
+volatile int maxCharge_degC = 50;
+
+
+//Current Limit Globals
+volatile int maxDischarge_mA = 45000; //THIS IS POSITIVE, BUT IS CONCEPTUALLY NEGATIVE; amps are leaving the system
+volatile int warning_maxDischarge_mA = 40000; //THIS IS POSITIVE, BUT IS CONCEPTUALLY NEGATIVE; amps are leaving the system
+volatile int maxCharge_mA = -8000; //THIS IS NEGATIVE, BUT IS CONCEPTUALLY POSITIVE; amps are coming into the system
+
+
+
+
 //Power globals
 volatile bool dischargingEnabled = false;           //Flag set true when discharging is successfully enabled on the BMS chip
 volatile bool chargingEnabled = false;              //Flag set true when charging is successfully enabled on the BMS chip
@@ -503,6 +525,7 @@ volatile float SOCNumerator = 0;
 
 volatile uint32_t AccumulatedAmpHoursAddress = 0x001000;
 volatile float AccumulatedAmpHours = 0;
+volatile float AccumulatedRegenAmpHours = 0;
 volatile float InstantaneousAmpHours = 0;
 
 
@@ -722,11 +745,12 @@ int main(void)
     if(DEBUG_ENABLED) Serial_println("Turning off precharge!");
         
     if(EMULATE_XRB == false) beginCANBusSRB();      //SRB has four packets sent once on startup
+    //if(EMULATE_XRB == true) beginCANBusXRB();      //Emulate XRB here when implemented
     
     
     
     
-//    interpolateBasedOnVoltage(bms_GetMinCellVoltage());
+    //    interpolateBasedOnVoltage(bms_GetMinCellVoltage());
     if(DEBUG_ENABLED) Serial_printlnf("bms_GetMinCellVoltage: %d volts ", bms_GetMinCellVoltage());
     if(DEBUG_ENABLED) Serial_printlnf("interpolateBasedOnVoltage(bms_GetMinCellVoltage()): %d%% ", interpolateBasedOnVoltage(bms_GetMinCellVoltage()));
     // Maybe we SHOULD NOT always interpolate based off voltage on bootup, but only when there is a discrepancy based on the lowest cell voltage?
@@ -754,6 +778,7 @@ int main(void)
             
             if(DEBUG_ENABLED) Serial_printlnf("bms_GetMinCellVoltage: %d volts ", bms_GetMinCellVoltage());
             
+            float maxCharge_A = maxCharge_mA/1000;
             
             //InstantaneousAmpHours = batteryCurrentBMS * ((bmsUpdateInterval*50) / 1000 ) * (1/3600); 
             InstantaneousAmpHours = batteryCurrentBMS * ((bmsUpdateInterval * 50.0) / 1000.0 ) * (1.0 / 3600.0);
@@ -788,6 +813,18 @@ int main(void)
                 // Re-enable charging when charger is unplugged
                 chargingEnabled = bms_EnableCharging();
                 if(DEBUG_ENABLED) Serial_println("Charger unplugged - re-enabled charging");
+            }
+            
+            // Remember: Charging current is negative! So we check if it is LESS than the limit.
+            if (batteryCurrentBMS <= maxCharge_A) {
+                if (DEBUG_ENABLED) Serial_printlnf("OVERCURRENT CHARGE FAULT! %f A", (double)batteryCurrentBMS);
+                
+                // Immediately severe the charging MOSFET
+                bms_DisableCharging();
+                chargingEnabled = false;
+                
+                // Optional: Kill the board entirely to protect it
+                powerGood = false; 
             }
             
             if(bms_CheckStatus() != 0){ //Check if the BMS has an error of some kind
@@ -1181,6 +1218,7 @@ void shutdownSequence(void){
     
     Serial_println("Saving Accumulated Amp Hours to Flash...");
     if(DEBUG_ENABLED) Serial_printlnf(">>> Since last at 100%, we have discharged: %f mAh <<<", AccumulatedAmpHours);
+    if(DEBUG_ENABLED) Serial_printlnf(">>> Since last at 100%, we have discharged: %f mAh <<<", AccumulatedRegenAmpHours);
     flash_WriteFloat(AccumulatedAmpHoursAddress, AccumulatedAmpHours);
     
     AccumulatedAmpHours = flash_ReadFloat(AccumulatedAmpHoursAddress);
@@ -1247,10 +1285,31 @@ bool configureBMS(void){
     bms_New(3, 0x18);       // Using the BQ76940 with 15 cells on 0x18
     success = bms_Begin();  // Try discovering BMS.
     if(!success) return false;  // Don't bother doing config if we couldn't find BMS chip
-    bms_SetTemperatureLimits(-20, 45, 0, 45);   // Set temperature limits
+    
+    // void bms_SetTemperatureLimits(int minDischarge_degC, int maxDischarge_degC, int minCharge_degC, int maxCharge_degC)
+    bms_SetTemperatureLimits(minDischarge_degC, maxDischarge_degC, minCharge_degC, maxCharge_degC);   // Set temperature limits 
+    
+    
     bms_SetShuntResistorValue(2);   // Shunt resistance on the board is 2 milliOhms
-    bms_SetShortCircuitProtection(40000, 200);  // Short circuit protection of 40A, delay of 200us
-    bms_SetOvercurrentDischargeProtection(30000, 320); // Overcurrent protection of 30A, delay of 320 ms
+    
+    //03/07/26 02:57:33 PM
+    //volatile int maxDischarge_mA = 45000; //THIS IS POSITIVE, BUT IS CONCEPTUALLY NEGATIVE; amps are leaving the system
+    //volatile int warning_maxDischarge_mA = 40000; //THIS IS POSITIVE, BUT IS CONCEPTUALLY NEGATIVE; amps are leaving the system
+    bms_SetShortCircuitProtection(maxDischarge_mA, 200);  // Short circuit protection of 40A, delay of 200us
+    
+    
+    
+    //OLD:  bms_SetOvercurrentDischargeProtection(30000, 320); // Overcurrent protection of 30A, delay of 320 ms
+    
+    bms_SetOvercurrentDischargeProtection(maxDischarge_mA, 320); // Overcurrent protection changed to bms_SetShortCircuitProtection limits;
+    // The BMS will send a warning to ESC to warn user via remote that we are approaching high current limit at 40A
+    // bms_SetOvercurrentDischargeProtection MUST be set to 45000 or else we will encounter a hardware based cutoff instead of a software based warning
+    
+    
+    
+    
+    
+    
     bms_SetCellUndervoltageProtection(MIN_CELL_MV, 3); // delay in s
     bms_SetCellOvervoltageProtection(MAX_CELL_MV, 3);  // delay in s
     bms_SetBalancingThresholds(0, MIN_CELL_MV, MIN_BALANCING_MV);
@@ -1262,16 +1321,76 @@ bool configureBMS(void){
 void updateTemperatures(void){
     if(verboseTemperatures==true){
         Serial_println("Temperatures: ");
-        Serial_printlnf("Sensor 1: %f", bms_GetTemperatureDegC(1));
-        Serial_printlnf("Sensor 2: %f", bms_GetTemperatureDegC(2));
-        Serial_printlnf("Sensor 3: %f", bms_GetTemperatureDegC(3));
-    
+        Serial_printlnf("Sensor 1: %f C", (double)bms_GetTemperatureDegC(1));
+        Serial_printlnf("Sensor 2: %f C", (double)bms_GetTemperatureDegC(2));
+        Serial_printlnf("Sensor 3: %f C", (double)bms_GetTemperatureDegC(3));
     }
     
-    
-    
-
-
+    // Loop through all 3 physical thermistors
+    for(int i = 1; i <= 3; i++) {
+        
+        float currentTemp = bms_GetTemperatureDegC(i);
+        // CHARGING -----------------------
+        // When going from discharging to charging, we need to ensure that limits are enforced
+        if(chargerConnected == true){ 
+            if(currentTemp >= maxCharge_degC){              
+                Serial_printlnf("HARD HIGH TEMP CHARGING LIMIT REACHED Sensor %d: %f C (Limit: %d C)", i, (double)currentTemp, maxCharge_degC);
+                //Error code goes here to indicate high temp cutoff reached
+                //Disallow charging
+                if(chargingEnabled) {
+                    bms_DisableCharging();
+                    chargingEnabled = false;
+                }
+            }
+            else if(currentTemp <= minCharge_degC){         
+                Serial_printlnf("HARD LOW TEMP CHARGING LIMIT REACHED Sensor %d: %f C (Limit: %d C)", i, (double)currentTemp, minCharge_degC);
+                //Error code goes here to indicate low temp cutoff reached
+                //Disallow charging
+                if(chargingEnabled) {
+                    bms_DisableCharging();
+                    chargingEnabled = false;
+                }
+            }
+            else if(currentTemp >= warning_maxCharge_degC){ 
+                Serial_printlnf("WARNING: APPROACHING HIGH TEMP CHARGING LIMIT Sensor %d: %f C (Threshold: %d C   Limit: %d C)", i, (double)currentTemp, warning_maxCharge_degC, maxCharge_degC);
+                //Warning code goes here to indicate high temp warning reached
+            }
+            else if(currentTemp <= warning_minCharge_degC){ 
+                Serial_printlnf("WARNING: APPROACHING LOW TEMP CHARGING LIMIT Sensor %d: %f C (Threshold: %d C   Limit: %d C)", i, (double)currentTemp, warning_minCharge_degC, minCharge_degC);
+                //Warning code goes here to indicate low temp warning reached
+                //Disallow charging
+            }
+        }
+        
+        
+        // DISCHARGING -----------------------
+        // DO NOT USE:
+        //        if(dischargingEnabled) {
+        //                bms_DisableDischarging();
+        //                dischargingEnabled = false;
+        //                powerGood = false; // Trigger the Red Light of Death
+        //            }
+        // THIS WILL CAUSE THE USER TO LOSE BRAKING POWER
+        
+        else{   
+            if(currentTemp >= maxDischarge_degC){              
+                Serial_printlnf("HARD HIGH TEMP DISCHARGING LIMIT REACHED Sensor %d: %f C (Limit: %d C)", i, (double)currentTemp, maxDischarge_degC);
+                //CANBUS Messages go here to ESC to initiate power limit
+            }
+            else if(currentTemp <= minDischarge_degC){         
+                Serial_printlnf("HARD LOW TEMP DISCHARGING LIMIT REACHED Sensor %d: %f C (Limit: %d C)", i, (double)currentTemp, minDischarge_degC);
+                //CANBUS Messages go here to ESC to initiate power limit
+            }
+            else if(currentTemp >= warning_maxDischarge_degC){ 
+                Serial_printlnf("WARNING: APPROACHING HIGH TEMP DISCHARGING LIMIT Sensor %d: %f C (Threshold: %d C   Limit: %d C)", i, (double)currentTemp, warning_maxDischarge_degC, maxDischarge_degC);
+                //CANBUS Messages go here to ESC to warn user via remote
+            }
+            else if(currentTemp <= warning_minDischarge_degC){ 
+                Serial_printlnf("WARNING: APPROACHING LOW TEMP DISCHARGING LIMIT Sensor %d: %f C (Threshold: %d C   Limit: %d C)", i, (double)currentTemp, warning_minDischarge_degC, minDischarge_degC);
+                //CANBUS Messages go here to ESC to warn user via remote
+            }
+        }
+    }
 }
 
 
