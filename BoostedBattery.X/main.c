@@ -776,7 +776,6 @@ int main(void)
             
             
             
-            if(DEBUG_ENABLED) Serial_printlnf("bms_GetMinCellVoltage: %d volts ", bms_GetMinCellVoltage());
             
             float maxCharge_A = maxCharge_mA/1000;
             
@@ -796,6 +795,7 @@ int main(void)
             
             // Check maximum cell voltage and control charging
             uint16_t maxCellVoltage = bms_GetMaxCellVoltage();
+            uint16_t minCellVoltage = bms_GetMinCellVoltage();
             if(chargerConnected && chargingEnabled && maxCellVoltage > MAX_CELL_CHG) {
                 // Disable charging if max cell voltage exceeds limit
                 if(millis() - chargerConnectedTime > CHG_CONN_PAUSE_TIME){
@@ -814,6 +814,56 @@ int main(void)
                 chargingEnabled = bms_EnableCharging();
                 if(DEBUG_ENABLED) Serial_println("Charger unplugged - re-enabled charging");
             }
+            
+            
+            
+            
+            
+            
+            
+            if(DEBUG_ENABLED) Serial_printlnf("minCellVoltage: %d mV ", minCellVoltage); 
+            
+            
+            
+            if(maxCellVoltage >= MAX_CELL_MV){              
+                Serial_printlnf("HARD HIGH VOLTAGE LIMIT REACHED - C_HIGH: %d mV (Limit: %d mV)", maxCellVoltage, MAX_CELL_MV);
+                //Warning CANBUS message gets sent to ESC to warn user
+                //HARD DISALLOW DISCHARGING; MOSFETS turn off. BRAKES WILL GET LOST HERE
+                
+            }
+            else if(maxCellVoltage >= MAX_CELL_CHG){ 
+                Serial_printlnf("WARNING: APPROACHING HIGH VOLTAGE LIMIT - C_HIGH: %d mV (High Warning: %d mV    High Limit: %d mV )", maxCellVoltage, MAX_CELL_CHG, MAX_CELL_MV);
+                //Warning CANBUS message gets sent to ESC to warn user
+            }
+            else{
+                Serial_printlnf("NO HIGH VOLTAGE THRESHOLDS TRIPPED -- C_HIGH: %d mV            High Warning: %d mV      High Limit: %d mV ", maxCellVoltage, MAX_CELL_CHG, MAX_CELL_MV);
+            }
+            
+            
+            
+            if(minCellVoltage <= MIN_CELL_MV){         
+                Serial_printlnf("HARD LOW VOLTAGE LIMIT REACHED - C_LOW: %d mV  (Limit: %d mV )", minCellVoltage, MIN_CELL_MV);
+                //HARD DISALLOW DISCHARGING; MOSFETS turn off. BRAKES WILL GET LOST HERE
+                
+            }
+            else if(minCellVoltage <= EMPTY_CELL_MV){ 
+                Serial_printlnf("WARNING: APPROACHING LOW VOLTAGE LIMIT - C_LOW: %d mV (Low Warning: %d mV   Low Limit: %d mV)", minCellVoltage, EMPTY_CELL_MV, MIN_CELL_MV);
+                //Warning code goes here to indicate low voltage reached
+            }
+            else{
+                Serial_printlnf("NO LOW VOLTAGE THRESHOLDS TRIPPED -- C_LOW: %d mV           Low Warning: %d mV     Low Limit: %d mV",  minCellVoltage, EMPTY_CELL_MV, MIN_CELL_MV);
+            }
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
             
             // Remember: Charging current is negative! So we check if it is LESS than the limit.
             if (batteryCurrentBMS <= maxCharge_A) {
@@ -1334,7 +1384,7 @@ void updateTemperatures(void){
         // When going from discharging to charging, we need to ensure that limits are enforced
         if(chargerConnected == true){ 
             if(currentTemp >= maxCharge_degC){              
-                Serial_printlnf("HARD HIGH TEMP CHARGING LIMIT REACHED Sensor %d: %f C (Limit: %d C)", i, (double)currentTemp, maxCharge_degC);
+                Serial_printlnf("HARD HIGH TEMP CHARGING LIMIT REACHED Sensor %d: %f C (High Limit: %d C)", i, (double)currentTemp, maxCharge_degC);
                 //Error code goes here to indicate high temp cutoff reached
                 //Disallow charging
                 if(chargingEnabled) {
@@ -1343,7 +1393,7 @@ void updateTemperatures(void){
                 }
             }
             else if(currentTemp <= minCharge_degC){         
-                Serial_printlnf("HARD LOW TEMP CHARGING LIMIT REACHED Sensor %d: %f C (Limit: %d C)", i, (double)currentTemp, minCharge_degC);
+                Serial_printlnf("HARD LOW TEMP CHARGING LIMIT REACHED Sensor %d: %f C (Low Limit: %d C)", i, (double)currentTemp, minCharge_degC);
                 //Error code goes here to indicate low temp cutoff reached
                 //Disallow charging
                 if(chargingEnabled) {
@@ -1352,13 +1402,20 @@ void updateTemperatures(void){
                 }
             }
             else if(currentTemp >= warning_maxCharge_degC){ 
-                Serial_printlnf("WARNING: APPROACHING HIGH TEMP CHARGING LIMIT Sensor %d: %f C (Threshold: %d C   Limit: %d C)", i, (double)currentTemp, warning_maxCharge_degC, maxCharge_degC);
+                Serial_printlnf("WARNING: APPROACHING HIGH TEMP CHARGING LIMIT Sensor %d: %f C (High Warning: %d C   High Limit: %d C)", i, (double)currentTemp, warning_maxCharge_degC, maxCharge_degC);
                 //Warning code goes here to indicate high temp warning reached
             }
             else if(currentTemp <= warning_minCharge_degC){ 
-                Serial_printlnf("WARNING: APPROACHING LOW TEMP CHARGING LIMIT Sensor %d: %f C (Threshold: %d C   Limit: %d C)", i, (double)currentTemp, warning_minCharge_degC, minCharge_degC);
+                Serial_printlnf("WARNING: APPROACHING LOW TEMP CHARGING LIMIT Sensor %d: %f C (Low Warning: %d C   Low Limit: %d C)", i, (double)currentTemp, warning_minCharge_degC, minCharge_degC);
                 //Warning code goes here to indicate low temp warning reached
                 //Disallow charging
+            }
+            else{
+                Serial_printlnf("NO CHARGING TEMPERATURE THRESHOLDS TRIPPED -- Sensor %d: %f C           Low Limit: %d C     Low Warning: %d C     High Warning: %d C     High Limit: %d C", i, (double)currentTemp, minCharge_degC,warning_minCharge_degC,warning_maxCharge_degC,maxCharge_degC);
+//                Expected Readout:
+//                            13:29:34.631 -> NO CHARGING TEMPERATURE THRESHOLDS TRIPPED -- Sensor 1: 24.000000 C           Low Limit: 0 C     Low Warning: 10 C     High Warning: 40 C     High Limit: 50 C
+//                            13:29:34.812 -> NO CHARGING TEMPERATURE THRESHOLDS TRIPPED -- Sensor 2: 24.000000 C           Low Limit: 0 C     Low Warning: 10 C     High Warning: 40 C     High Limit: 50 C
+//                            13:29:34.955 -> NO CHARGING TEMPERATURE THRESHOLDS TRIPPED -- Sensor 3: 20.799999 C           Low Limit: 0 C     Low Warning: 10 C     High Warning: 40 C     High Limit: 50 C
             }
         }
         
@@ -1388,6 +1445,14 @@ void updateTemperatures(void){
             else if(currentTemp <= warning_minDischarge_degC){ 
                 Serial_printlnf("WARNING: APPROACHING LOW TEMP DISCHARGING LIMIT Sensor %d: %f C (Threshold: %d C   Limit: %d C)", i, (double)currentTemp, warning_minDischarge_degC, minDischarge_degC);
                 //CANBUS Messages go here to ESC to warn user via remote
+            }
+            else{
+                Serial_printlnf("NO DISCHARGING TEMPERATURE THRESHOLDS TRIPPED -- Sensor %d: %f C           Low Limit: %d C     Low Warning: %d C     High Warning: %d C     High Limit: %d C", i, (double)currentTemp, minDischarge_degC,warning_minDischarge_degC,warning_maxDischarge_degC,maxDischarge_degC);
+//                Expected Readout:
+//                            13:30:53.081 -> NO DISCHARGING TEMPERATURE THRESHOLDS TRIPPED -- Sensor 1: 24.000000 C           Low Limit: 0 C     Low Warning: 10 C     High Warning: 50 C     High Limit: 60 C
+//                            13:30:53.233 -> NO DISCHARGING TEMPERATURE THRESHOLDS TRIPPED -- Sensor 2: 24.000000 C           Low Limit: 0 C     Low Warning: 10 C     High Warning: 50 C     High Limit: 60 C
+//                            13:30:53.419 -> NO DISCHARGING TEMPERATURE THRESHOLDS TRIPPED -- Sensor 3: 20.799999 C           Low Limit: 0 C     Low Warning: 10 C     High Warning: 50 C     High Limit: 60 C
+
             }
         }
     }
