@@ -85,6 +85,8 @@
       <itemPath>BQ76940.c</itemPath>
       <itemPath>Serial.c</itemPath>
       <itemPath>CANBus.c</itemPath>
+      <itemPath>BatteryProfile.c</itemPath>
+      <itemPath>BatteryProfile.h</itemPath>
     </logicalFolder>
   </logicalFolder>
   <sourceRootList>

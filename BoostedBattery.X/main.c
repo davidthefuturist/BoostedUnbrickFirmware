@@ -63,10 +63,11 @@
 #include "BQ76940.h"
 #include "TLC59108.h"
 #include "CANBus.h"
+#include "BatteryProfile.h"
 
 #define EMULATE_XRB             true
 
-#define DEBUG_ENABLED           true       //Enables serial printing of all messages
+#define DEBUG_ENABLED           false       //Enables serial printing of all messages
 #define CELL_COUNT              13      //Number of cells in pack
 //#define MIN_CELL_MV             3300    //Cell cutoff voltage
 //#define MIN_CELL_MV             3100    //10/25/25 05:53:30 PM Changed to 3100 to more closely match B2XR behavior
@@ -268,6 +269,26 @@ volatile bool shutdownFromESCDetected = false;
 
 
 
+
+// coulomb?counting globals
+volatile float mah_consumed = 0.0f;                //milliamp?hours consumed since boot
+static uint64_t last_integration_millis = 0;       //timestamp of last current integration
+static uint64_t last_capacity_update = 0;          //timestamp for calling BatteryProfile_UpdateCapacity
+extern volatile bool battery_profile_capturing;
+
+// battery profile used for SOC estimation
+BatteryProfile batteryProfile = {
+    .battery_curve = {3000, 3200, 3350, 3450, 3525,
+                      3600, 3675, 3750, 3800, 3850, 3950},
+    .battery_historical_mAh = {4000, 0, 0},
+    .battery_designed_capacity_mAh = 4000
+};
+
+
+
+
+
+
 //Counters
 volatile uint64_t chargerConnectedTime = 0;         //Number of milliseconds elapsed when the charger was last seen as connected
 volatile uint64_t millis_Count = 0;                 //Increment this every millisecond
@@ -322,6 +343,9 @@ volatile uint16_t adc_PackShuntReference = 0xFFFF;          //Reads 506 for abov
 volatile uint16_t adc_DischargeThermistorSense = 0xFFFF;    //Voltage read from the thermistor near the discharge FETs
 volatile uint16_t adc_ChargeThermistorSense = 0xFFFF;       //Voltage read from the thermistor near the charge FETs
 volatile uint16_t adc_BMSRegulatorSense = 0xFFFF;           //Voltage produced by the BMS chip's internal LDO
+
+
+
 
 
 //Function prototypes
@@ -575,36 +599,40 @@ volatile float InstantaneousAmpHours = 0;
 // =======================================================================
 
 
-
-int interpolateBasedOnVoltage(int lowestCellVoltage) {
-    // Do not interpolate boundaries
-    if (lowestCellVoltage >= 3900) return 100;
-    if (lowestCellVoltage <= 3000) return 0;
-
-    // Lithium Ion Curve Data Arrays (Mapped from lowest to highest)
-    const int curve_V[]   = {3000, 3100, 3250, 3400, 3450, 3500, 3550, 3600, 3700, 3750, 3900};
-    const int curve_SOC[] = {0,    10,   20,   30,   40,   50,   60,   70,   80,   90,   100};
-    const int numPoints = 11;
-
-    // Loop through to find which "bucket" our voltage falls into
-    for (int i = 0; i < numPoints - 1; i++) {
-        if (lowestCellVoltage >= curve_V[i] && lowestCellVoltage < curve_V[i+1]) {
-            
-            // Define upper/lower bounds
-            int voltageLowerBound = curve_V[i];
-            int voltageUpperBound = curve_V[i+1];
-            int percentageLowerBound = curve_SOC[i];
-            int percentageUpperBound = curve_SOC[i+1];
-
-            // Calculate the Point-Slope Interpolation
-            float interpolatedSOC = percentageLowerBound + ((float)(lowestCellVoltage - voltageLowerBound) * (percentageUpperBound - percentageLowerBound)) / (voltageUpperBound - voltageLowerBound);
-            
-            return (int)interpolatedSOC;
-        }
-    }
-    return 0; // Failsafe, should never be hit
-}
-
+// Store in flash:
+//
+// Flash stores numerator SOC
+// Flash stores open cell min cell voltage in the flash (here's current min cell voltage - here's saved min cell voltage)
+//
+//int interpolateBasedOnVoltage(int lowestCellVoltage) {
+//    // Do not interpolate boundaries
+//    if (lowestCellVoltage >= 3900) return 100;
+//    if (lowestCellVoltage <= 3000) return 0;
+//
+//    // Lithium Ion Curve Data Arrays (Mapped from lowest to highest)
+//    const int curve_V[]   = {3000, 3100, 3250, 3400, 3450, 3500, 3550, 3600, 3700, 3750, 3900};
+//    const int curve_SOC[] = {0,    10,   20,   30,   40,   50,   60,   70,   80,   90,   100};    
+//    const int numPoints = 11;
+//
+//    // Loop through to find which "bucket" our voltage falls into
+//    for (int i = 0; i < numPoints - 1; i++) {
+//        if (lowestCellVoltage >= curve_V[i] && lowestCellVoltage < curve_V[i+1]) {
+//            
+//            // Define upper/lower bounds
+//            int voltageLowerBound = curve_V[i];
+//            int voltageUpperBound = curve_V[i+1];
+//            int percentageLowerBound = curve_SOC[i];
+//            int percentageUpperBound = curve_SOC[i+1];
+//
+//            // Calculate the Point-Slope Interpolation
+//            float interpolatedSOC = percentageLowerBound + ((float)(lowestCellVoltage - voltageLowerBound) * (percentageUpperBound - percentageLowerBound)) / (voltageUpperBound - voltageLowerBound);
+//            
+//            return (int)interpolatedSOC;
+//        }
+//    }
+//    return 0; // Failsafe, should never be hit
+//}
+//
 
 
 
@@ -752,11 +780,11 @@ int main(void)
     
     //    interpolateBasedOnVoltage(bms_GetMinCellVoltage());
     if(DEBUG_ENABLED) Serial_printlnf("bms_GetMinCellVoltage: %d volts ", bms_GetMinCellVoltage());
-    if(DEBUG_ENABLED) Serial_printlnf("interpolateBasedOnVoltage(bms_GetMinCellVoltage()): %d%% ", interpolateBasedOnVoltage(bms_GetMinCellVoltage()));
+    //This doesn't exist right now     if(DEBUG_ENABLED) Serial_printlnf("interpolateBasedOnVoltage(bms_GetMinCellVoltage()): %d%% ", interpolateBasedOnVoltage(bms_GetMinCellVoltage()));
     // Maybe we SHOULD NOT always interpolate based off voltage on bootup, but only when there is a discrepancy based on the lowest cell voltage?
     
     
-    SOCNumerator = ((float)interpolateBasedOnVoltage(bms_GetMinCellVoltage())/100) * SOCDenominator;
+    //This doesn't exist right now     SOCNumerator = ((float)interpolateBasedOnVoltage(bms_GetMinCellVoltage())/100) * SOCDenominator;
     if(DEBUG_ENABLED) Serial_printlnf("Setting SOC Numerator To: %d ", (int)SOCNumerator);
     
     while (running) //Main loop, sits here until we want to power off the battery
@@ -773,6 +801,36 @@ int main(void)
         if(updateBMS){  //Check if timer set flag to fetch statuses from BMS. Every 250ms (5 ticks of 50ms timer).
             bms_Update();   //Reads status register, voltages, current, etc from BMS
             batteryCurrentBMS = (float)bms_GetBatteryCurrent()/-1000.0; //Get current in amps from the BMS
+            
+            
+            
+            
+            
+            // integrate capacity based on latest current and elapsed time
+            
+            //CURLY BRACKETS LIMITS SCOPE OF VARIABLES AND DE-ALLOCATES MEMORY
+            {
+                uint64_t now = millis();
+                if(last_integration_millis == 0) {
+                    last_integration_millis = now;
+                }
+                uint64_t dt = now - last_integration_millis;
+                last_integration_millis = now;
+
+                float current_mA = batteryCurrentBMS * 1000.0f;
+                mah_consumed += current_mA * ((float)dt / 3600000.0f);      // Positive current = discharge by current convention
+
+                // periodically update the profile history (once per second)
+                if(now - last_capacity_update >= 1000) {
+                    BatteryProfile_UpdateCapacity(&batteryProfile,
+                                                  (uint32_t)mah_consumed,
+                                                  (uint16_t)bms_GetMinCellVoltage(),
+                                                  (uint16_t)bms_GetMaxCellVoltage(),
+                                                  current_mA,
+                                                  200 /* idle threshold mA */);
+                    last_capacity_update = now;
+                }
+            }
             
             
             
@@ -826,33 +884,36 @@ int main(void)
             
             
             if(maxCellVoltage >= MAX_CELL_MV){              
-                Serial_printlnf("HARD HIGH VOLTAGE LIMIT REACHED - C_HIGH: %d mV (Limit: %d mV)", maxCellVoltage, MAX_CELL_MV);
+                if(DEBUG_ENABLED) Serial_printlnf("HARD HIGH VOLTAGE LIMIT REACHED - C_HIGH: %d mV (Limit: %d mV)", maxCellVoltage, MAX_CELL_MV);
                 //Warning CANBUS message gets sent to ESC to warn user
                 //HARD DISALLOW DISCHARGING; MOSFETS turn off. BRAKES WILL GET LOST HERE
                 
             }
             else if(maxCellVoltage >= MAX_CELL_CHG){ 
-                Serial_printlnf("WARNING: APPROACHING HIGH VOLTAGE LIMIT - C_HIGH: %d mV (High Warning: %d mV    High Limit: %d mV )", maxCellVoltage, MAX_CELL_CHG, MAX_CELL_MV);
+                if(DEBUG_ENABLED) Serial_printlnf("WARNING: APPROACHING HIGH VOLTAGE LIMIT - C_HIGH: %d mV (High Warning: %d mV    High Limit: %d mV )", maxCellVoltage, MAX_CELL_CHG, MAX_CELL_MV);
                 //Warning CANBUS message gets sent to ESC to warn user
             }
             else{
-                Serial_printlnf("NO HIGH VOLTAGE THRESHOLDS TRIPPED -- C_HIGH: %d mV            High Warning: %d mV      High Limit: %d mV ", maxCellVoltage, MAX_CELL_CHG, MAX_CELL_MV);
+                if(DEBUG_ENABLED) Serial_printlnf("NO HIGH VOLTAGE THRESHOLDS TRIPPED -- C_HIGH: %d mV            High Warning: %d mV      High Limit: %d mV ", maxCellVoltage, MAX_CELL_CHG, MAX_CELL_MV);
             }
             
             
             
             if(minCellVoltage <= MIN_CELL_MV){         
-                Serial_printlnf("HARD LOW VOLTAGE LIMIT REACHED - C_LOW: %d mV  (Limit: %d mV )", minCellVoltage, MIN_CELL_MV);
+                if(DEBUG_ENABLED) Serial_printlnf("HARD LOW VOLTAGE LIMIT REACHED - C_LOW: %d mV  (Limit: %d mV )", minCellVoltage, MIN_CELL_MV);
                 //HARD DISALLOW DISCHARGING; MOSFETS turn off. BRAKES WILL GET LOST HERE
                 
             }
             else if(minCellVoltage <= EMPTY_CELL_MV){ 
-                Serial_printlnf("WARNING: APPROACHING LOW VOLTAGE LIMIT - C_LOW: %d mV (Low Warning: %d mV   Low Limit: %d mV)", minCellVoltage, EMPTY_CELL_MV, MIN_CELL_MV);
+                if(DEBUG_ENABLED) Serial_printlnf("WARNING: APPROACHING LOW VOLTAGE LIMIT - C_LOW: %d mV (Low Warning: %d mV   Low Limit: %d mV)", minCellVoltage, EMPTY_CELL_MV, MIN_CELL_MV);
                 //Warning code goes here to indicate low voltage reached
             }
             else{
-                Serial_printlnf("NO LOW VOLTAGE THRESHOLDS TRIPPED -- C_LOW: %d mV           Low Warning: %d mV     Low Limit: %d mV",  minCellVoltage, EMPTY_CELL_MV, MIN_CELL_MV);
+                if(DEBUG_ENABLED) Serial_printlnf("NO LOW VOLTAGE THRESHOLDS TRIPPED -- C_LOW: %d mV           Low Warning: %d mV     Low Limit: %d mV",  minCellVoltage, EMPTY_CELL_MV, MIN_CELL_MV);
             }
+            
+            
+            
             
             
             
@@ -902,14 +963,14 @@ int main(void)
         
         if(updateDebug && DEBUG_ENABLED){   //Debug message of voltages of all channels on the BMS, currents, and cell balancing status
             
-            Serial_printlnf("powerGood: %s", powerGood ? "true" : "false");
+            if(DEBUG_ENABLED) Serial_printlnf("powerGood: %s", powerGood ? "true" : "false");
             
-            Serial_printlnf("Overall Voltage: %0.3fV", bms_GetBatteryVoltage()/1000.0);
-            Serial_printlnf("Pack Current: %0.3fA, BMS Current: %0.3fA", batteryCurrentADC, batteryCurrentBMS);
+            if(DEBUG_ENABLED) Serial_printlnf("Overall Voltage: %0.3fV", bms_GetBatteryVoltage()/1000.0);
+            if(DEBUG_ENABLED) Serial_printlnf("Pack Current: %0.3fA, BMS Current: %0.3fA", batteryCurrentADC, batteryCurrentBMS);
             for(int i = 1; i <= 15; i++){
-                Serial_printf("C%02d: %04d  ", i, bms_GetCellVoltage(i));
+                if(DEBUG_ENABLED) Serial_printf("C%02d: %04d  ", i, bms_GetCellVoltage(i));
             }
-            Serial_println(""); 
+            if(DEBUG_ENABLED) Serial_println(""); 
             bms_PrintCellBalancingStatus();
             updateDebug = false;
         }
@@ -918,10 +979,10 @@ int main(void)
             //if(chargerConnected && DEBUG_ENABLED) Serial_println("Charger connected");
             //else Serial_println("Charger not connected");
             if(chargerConnected){ 
-                Serial_println("Charger just connected");
+                if(DEBUG_ENABLED) Serial_println("Charger just connected");
             }
             else{
-                Serial_println("Charger just disconnected");
+                if(DEBUG_ENABLED) Serial_println("Charger just disconnected");
                 powerOffWhenChargerNotConnected = true;
                 shutdownSequence();
             }
@@ -1113,13 +1174,13 @@ int main(void)
                         case modeESCID:
                             if(DEBUG_ENABLED) Serial_printlnf("modeESC      ID and Data %08lx: %02x %02x %02x", recCanMsg.msgId, recCanMsg.data[0], recCanMsg.data[1], recCanMsg.data[2]);
                             if (recCanMsg.data[1] == 0x15) {
-                                Serial_println("ESC ACKNOWLEDGES 5-BUTTON PRESS");
-                                Serial_println("TURNING BUTTON LED BLUE");
+                                if(DEBUG_ENABLED) Serial_println("ESC ACKNOWLEDGES 5-BUTTON PRESS");
+                                if(DEBUG_ENABLED) Serial_println("TURNING BUTTON LED BLUE");
 
                             }
                             else if (recCanMsg.data[1] == 0x16) {
-                                Serial_println("ESC HAS ANNOUNCED ENDING PAIRING MODE");
-                                Serial_println("TURNING BUTTON BACK TO PREVIOUS STATE");
+                                if(DEBUG_ENABLED) Serial_println("ESC HAS ANNOUNCED ENDING PAIRING MODE");
+                                if(DEBUG_ENABLED) Serial_println("TURNING BUTTON BACK TO PREVIOUS STATE");
 //                                listeningForExitingPairingMode = false;
                                 pairingMode = false;
 
@@ -1271,6 +1332,10 @@ void shutdownSequence(void){
     if(DEBUG_ENABLED) Serial_printlnf(">>> Since last at 100%, we have discharged: %f mAh <<<", AccumulatedRegenAmpHours);
     flash_WriteFloat(AccumulatedAmpHoursAddress, AccumulatedAmpHours);
     
+    
+    
+    //flash_WriteBatteryProfile()//
+    
     AccumulatedAmpHours = flash_ReadFloat(AccumulatedAmpHoursAddress);
     if(DEBUG_ENABLED) Serial_printlnf(">>> Verification: %f mAh <<<", AccumulatedAmpHours);
     
@@ -1370,10 +1435,10 @@ bool configureBMS(void){
 
 void updateTemperatures(void){
     if(verboseTemperatures==true){
-        Serial_println("Temperatures: ");
-        Serial_printlnf("Sensor 1: %f C", (double)bms_GetTemperatureDegC(1));
-        Serial_printlnf("Sensor 2: %f C", (double)bms_GetTemperatureDegC(2));
-        Serial_printlnf("Sensor 3: %f C", (double)bms_GetTemperatureDegC(3));
+        if(DEBUG_ENABLED) Serial_println("Temperatures: ");
+        if(DEBUG_ENABLED) Serial_printlnf("Sensor 1: %f C", (double)bms_GetTemperatureDegC(1));
+        if(DEBUG_ENABLED) Serial_printlnf("Sensor 2: %f C", (double)bms_GetTemperatureDegC(2));
+        if(DEBUG_ENABLED) Serial_printlnf("Sensor 3: %f C", (double)bms_GetTemperatureDegC(3));
     }
     
     // Loop through all 3 physical thermistors
@@ -1384,7 +1449,7 @@ void updateTemperatures(void){
         // When going from discharging to charging, we need to ensure that limits are enforced
         if(chargerConnected == true){ 
             if(currentTemp >= maxCharge_degC){              
-                Serial_printlnf("HARD HIGH TEMP CHARGING LIMIT REACHED Sensor %d: %f C (High Limit: %d C)", i, (double)currentTemp, maxCharge_degC);
+                if(DEBUG_ENABLED) Serial_printlnf("HARD HIGH TEMP CHARGING LIMIT REACHED Sensor %d: %f C (High Limit: %d C)", i, (double)currentTemp, maxCharge_degC);
                 //Error code goes here to indicate high temp cutoff reached
                 //Disallow charging
                 if(chargingEnabled) {
@@ -1393,7 +1458,7 @@ void updateTemperatures(void){
                 }
             }
             else if(currentTemp <= minCharge_degC){         
-                Serial_printlnf("HARD LOW TEMP CHARGING LIMIT REACHED Sensor %d: %f C (Low Limit: %d C)", i, (double)currentTemp, minCharge_degC);
+                if(DEBUG_ENABLED) Serial_printlnf("HARD LOW TEMP CHARGING LIMIT REACHED Sensor %d: %f C (Low Limit: %d C)", i, (double)currentTemp, minCharge_degC);
                 //Error code goes here to indicate low temp cutoff reached
                 //Disallow charging
                 if(chargingEnabled) {
@@ -1402,16 +1467,16 @@ void updateTemperatures(void){
                 }
             }
             else if(currentTemp >= warning_maxCharge_degC){ 
-                Serial_printlnf("WARNING: APPROACHING HIGH TEMP CHARGING LIMIT Sensor %d: %f C (High Warning: %d C   High Limit: %d C)", i, (double)currentTemp, warning_maxCharge_degC, maxCharge_degC);
+                if(DEBUG_ENABLED) Serial_printlnf("WARNING: APPROACHING HIGH TEMP CHARGING LIMIT Sensor %d: %f C (High Warning: %d C   High Limit: %d C)", i, (double)currentTemp, warning_maxCharge_degC, maxCharge_degC);
                 //Warning code goes here to indicate high temp warning reached
             }
             else if(currentTemp <= warning_minCharge_degC){ 
-                Serial_printlnf("WARNING: APPROACHING LOW TEMP CHARGING LIMIT Sensor %d: %f C (Low Warning: %d C   Low Limit: %d C)", i, (double)currentTemp, warning_minCharge_degC, minCharge_degC);
+                if(DEBUG_ENABLED) Serial_printlnf("WARNING: APPROACHING LOW TEMP CHARGING LIMIT Sensor %d: %f C (Low Warning: %d C   Low Limit: %d C)", i, (double)currentTemp, warning_minCharge_degC, minCharge_degC);
                 //Warning code goes here to indicate low temp warning reached
                 //Disallow charging
             }
             else{
-                Serial_printlnf("NO CHARGING TEMPERATURE THRESHOLDS TRIPPED -- Sensor %d: %f C           Low Limit: %d C     Low Warning: %d C     High Warning: %d C     High Limit: %d C", i, (double)currentTemp, minCharge_degC,warning_minCharge_degC,warning_maxCharge_degC,maxCharge_degC);
+                if(DEBUG_ENABLED) Serial_printlnf("NO CHARGING TEMPERATURE THRESHOLDS TRIPPED -- Sensor %d: %f C           Low Limit: %d C     Low Warning: %d C     High Warning: %d C     High Limit: %d C", i, (double)currentTemp, minCharge_degC,warning_minCharge_degC,warning_maxCharge_degC,maxCharge_degC);
 //                Expected Readout:
 //                            13:29:34.631 -> NO CHARGING TEMPERATURE THRESHOLDS TRIPPED -- Sensor 1: 24.000000 C           Low Limit: 0 C     Low Warning: 10 C     High Warning: 40 C     High Limit: 50 C
 //                            13:29:34.812 -> NO CHARGING TEMPERATURE THRESHOLDS TRIPPED -- Sensor 2: 24.000000 C           Low Limit: 0 C     Low Warning: 10 C     High Warning: 40 C     High Limit: 50 C
@@ -1431,23 +1496,23 @@ void updateTemperatures(void){
         
         else{   
             if(currentTemp >= maxDischarge_degC){              
-                Serial_printlnf("HARD HIGH TEMP DISCHARGING LIMIT REACHED Sensor %d: %f C (Limit: %d C)", i, (double)currentTemp, maxDischarge_degC);
+                if(DEBUG_ENABLED) Serial_printlnf("HARD HIGH TEMP DISCHARGING LIMIT REACHED Sensor %d: %f C (Limit: %d C)", i, (double)currentTemp, maxDischarge_degC);
                 //CANBUS Messages go here to ESC to initiate power limit
             }
             else if(currentTemp <= minDischarge_degC){         
-                Serial_printlnf("HARD LOW TEMP DISCHARGING LIMIT REACHED Sensor %d: %f C (Limit: %d C)", i, (double)currentTemp, minDischarge_degC);
+                if(DEBUG_ENABLED) Serial_printlnf("HARD LOW TEMP DISCHARGING LIMIT REACHED Sensor %d: %f C (Limit: %d C)", i, (double)currentTemp, minDischarge_degC);
                 //CANBUS Messages go here to ESC to initiate power limit
             }
             else if(currentTemp >= warning_maxDischarge_degC){ 
-                Serial_printlnf("WARNING: APPROACHING HIGH TEMP DISCHARGING LIMIT Sensor %d: %f C (Threshold: %d C   Limit: %d C)", i, (double)currentTemp, warning_maxDischarge_degC, maxDischarge_degC);
+                if(DEBUG_ENABLED) Serial_printlnf("WARNING: APPROACHING HIGH TEMP DISCHARGING LIMIT Sensor %d: %f C (Threshold: %d C   Limit: %d C)", i, (double)currentTemp, warning_maxDischarge_degC, maxDischarge_degC);
                 //CANBUS Messages go here to ESC to warn user via remote
             }
             else if(currentTemp <= warning_minDischarge_degC){ 
-                Serial_printlnf("WARNING: APPROACHING LOW TEMP DISCHARGING LIMIT Sensor %d: %f C (Threshold: %d C   Limit: %d C)", i, (double)currentTemp, warning_minDischarge_degC, minDischarge_degC);
+                if(DEBUG_ENABLED) Serial_printlnf("WARNING: APPROACHING LOW TEMP DISCHARGING LIMIT Sensor %d: %f C (Threshold: %d C   Limit: %d C)", i, (double)currentTemp, warning_minDischarge_degC, minDischarge_degC);
                 //CANBUS Messages go here to ESC to warn user via remote
             }
             else{
-                Serial_printlnf("NO DISCHARGING TEMPERATURE THRESHOLDS TRIPPED -- Sensor %d: %f C           Low Limit: %d C     Low Warning: %d C     High Warning: %d C     High Limit: %d C", i, (double)currentTemp, minDischarge_degC,warning_minDischarge_degC,warning_maxDischarge_degC,maxDischarge_degC);
+                if(DEBUG_ENABLED) Serial_printlnf("NO DISCHARGING TEMPERATURE THRESHOLDS TRIPPED -- Sensor %d: %f C           Low Limit: %d C     Low Warning: %d C     High Warning: %d C     High Limit: %d C", i, (double)currentTemp, minDischarge_degC,warning_minDischarge_degC,warning_maxDischarge_degC,maxDischarge_degC);
 //                Expected Readout:
 //                            13:30:53.081 -> NO DISCHARGING TEMPERATURE THRESHOLDS TRIPPED -- Sensor 1: 24.000000 C           Low Limit: 0 C     Low Warning: 10 C     High Warning: 50 C     High Limit: 60 C
 //                            13:30:53.233 -> NO DISCHARGING TEMPERATURE THRESHOLDS TRIPPED -- Sensor 2: 24.000000 C           Low Limit: 0 C     Low Warning: 10 C     High Warning: 50 C     High Limit: 60 C
@@ -1459,26 +1524,39 @@ void updateTemperatures(void){
 }
 
 
-//Takes and calculates SOC based on the lowest cell in the pack. This gives the user a better idea of when they will lose power.
+//SOC calculation using the BatteryProfile helper routines.  The first
+//time updateSOC() is called the routine uses a voltage lookup to obtain
+//an initial state?of?charge and seeds the mAh consumed counter from that
+//value.  On subsequent invocations the historical?capacity algorithm is
+//used instead, with the continuously?integrated mAh value as input.
 void updateSOC(void){
-    int minV = bms_GetMinCellVoltage();
-    int maxV = bms_GetMaxCellVoltage();
-    cellMinMaxDelta = maxV - minV;
-    float percentage;
-    if(limpMode && minV < EMPTY_CELL_MV){   //If we're in limp mode, display the amount left in limp charge
-        float range = MIN_CELL_MV - LIMP_CELL_MV;
-        float delta = minV - LIMP_CELL_MV;
-        percentage = 100.0 * (delta/range);
+    static bool firstCall = true;
+    float soc = 0.0f;
+
+    if (firstCall) {
+        // voltage?based estimate for initial boot
+        uint16_t minV = (uint16_t)bms_GetMinCellVoltage();
+        soc = BatteryProfile_GetSOCFromVoltage(&batteryProfile, minV);
+        Serial_printlnf("Initial SOC: %d", (int)soc);
+        // initialize consumed counter using the lookup
+        mah_consumed = (float)BatteryProfile_ConsumedFromSOC(&batteryProfile, soc);
+        Serial_printlnf("Initial mAH consumed: %d", (int)mah_consumed);
+        firstCall = false;
+    } else {
+        // historical capacity approach thereafter
+        soc = BatteryProfile_GetSOCFromHistoricalCapacity(&batteryProfile,
+                                                         (uint32_t)mah_consumed);
     }
-    else{   //In normal mode, show overall percentage.
-        float range = MAX_CELL_CHG - EMPTY_CELL_MV;     //Ex: 4100mV - 3200mV = 900mV range
-        float delta = minV - EMPTY_CELL_MV;             //Ex: 3739mV - 3200mV = 539mV to empty
-        percentage = 100.0 * (delta/range);             //Ex: 100% * 539mV/900mV = 59.9%
-    }
-    if(percentage < 0) percentage = 0;  //Do floor and ceiling for percentage before sending to global batterySOC
-    if(percentage > 100) percentage = 100;
-    batterySOC = percentage;
+
+    // clamp results and write the global
+    if (soc < 0.0f) soc = 0.0f;
+    if (soc > 100.0f) soc = 100.0f;
+    batterySOC = (uint8_t)soc;
 }
+
+
+
+
 
 //Checks if the charger has been connected. This is a bit overkill in the current implementation. I believe there is a precharge circuit, but I'm not using it at the moment.
 void updateCharging(void){
@@ -1769,6 +1847,12 @@ void mapStatusLED(void){
         else if(limpMode){      //In Limp Mode, show blue as well
             LED.R = 0;
             LED.G = 0;
+            LED.B = 255;
+        }
+        //Ported from line 1183
+        else if(battery_profile_capturing){     // TODO: keep this? When capturing battery profile, show cyan
+            LED.R = 0;
+            LED.G = 255;
             LED.B = 255;
         }
         else if(chargerConnected && chargingEnabled){   //Currently charging the battery - fade red
