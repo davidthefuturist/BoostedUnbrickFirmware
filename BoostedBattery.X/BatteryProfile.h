@@ -6,7 +6,7 @@
 
 #define BATTERY_PROFILE_HISTORY_COUNT           3
 #define BATTERY_PROFILE_SOC_AVG_COUNT           10  /* number of samples for SOC rolling average */
-#define BATTERY_FULL_CHARGE_SOC_THRESHOLD       95.0f
+#define BATTERY_FULL_CHARGE_SOC_THRESHOLD       15.0f
 #define BATTERY_EMPTY_SOC_THRESHOLD             5.0f
 #define BATTERY_EXTRAPOLATED_CAPACITY_FACTOR    1.05f
 
@@ -27,6 +27,10 @@ typedef struct {
     uint16_t battery_curve[11];
     uint32_t battery_historical_mAh[BATTERY_PROFILE_HISTORY_COUNT]; /* historical mAh capacity of the battery, used for reporting to the ESC */
     uint32_t battery_designed_capacity_mAh; /* designed capacity of the battery, used for reporting of health over time */
+    uint32_t soc_denominator; // THIS IS CALCULATED BY TAKING THE AVERAGE OF THE LAST 3 battery_historical_mAh READINGS
+    uint32_t lowest_cell_open_voltage_at_shutdown;
+    uint32_t milliamp_hours_left_battery_since_start_of_ride;
+    uint32_t milliamp_hours_regened_into_battery_start_of_ride;
 } BatteryProfile;
 
 /**

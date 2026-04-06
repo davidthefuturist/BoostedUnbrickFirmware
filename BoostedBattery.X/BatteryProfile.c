@@ -89,7 +89,7 @@ float BatteryProfile_GetSOCFromHistoricalCapacity(const BatteryProfile *profile,
  * based on coulomb-counted mAh consumed.  See header comment for details.
  */
 void BatteryProfile_UpdateCapacity(BatteryProfile *profile,
-                                  uint32_t consumed_mAH,
+                                  uint32_t net_consumed_mAH,
                                   uint16_t voltage_lowest_cell,
                                   uint16_t voltage_highest_cell,
                                   float pack_current,
@@ -141,13 +141,13 @@ void BatteryProfile_UpdateCapacity(BatteryProfile *profile,
             curr_avg > -(float)pack_current_idle) {
             battery_profile_capturing = true;
             Serial_println("Enable Capturing of Pack Capacity");
-            start_consumed = consumed_mAH;
+            start_consumed = net_consumed_mAH;
         }
     } else {
         if (soc_avg_low <= BATTERY_EMPTY_SOC_THRESHOLD &&
             curr_avg < (float)pack_current_idle &&
             curr_avg > -(float)pack_current_idle) {
-            uint32_t used = consumed_mAH - start_consumed;
+            uint32_t used = net_consumed_mAH - start_consumed;
             uint32_t estimate = (uint32_t)((float)used * 1.05f + 0.5f);
 
             /* shift history array down and insert new value at index 0 */
@@ -156,6 +156,7 @@ void BatteryProfile_UpdateCapacity(BatteryProfile *profile,
                     profile->battery_historical_mAh[i - 1];
             }
             profile->battery_historical_mAh[0] = estimate;
+            //Question: Should we average last ~3? readings and make that the new SOC denominator (profile->soc_denominator) over here?
 
             battery_profile_capturing = false; /* ready for next full?cycle capture */
         }

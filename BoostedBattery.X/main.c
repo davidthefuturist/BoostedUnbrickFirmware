@@ -272,17 +272,23 @@ volatile bool shutdownFromESCDetected = false;
 
 // coulomb?counting globals
 volatile float mah_consumed = 0.0f;                //milliamp?hours consumed since boot
+volatile float mah_regened = 0.0f;
+volatile float mah_net = 0.0f;
 static uint64_t last_integration_millis = 0;       //timestamp of last current integration
 static uint64_t last_capacity_update = 0;          //timestamp for calling BatteryProfile_UpdateCapacity
 extern volatile bool battery_profile_capturing;
 
 // battery profile used for SOC estimation
 BatteryProfile batteryProfile = {
-    .battery_curve = {3000, 3200, 3350, 3450, 3525,
-                      3600, 3675, 3750, 3800, 3850, 3950},
+    .battery_curve = {3000, 3200, 3350, 3450, 3525, 3600, 3675, 3750, 3800, 3850, 3950},
     .battery_historical_mAh = {4000, 0, 0},
-    .battery_designed_capacity_mAh = 4000
+    .battery_designed_capacity_mAh = 4000,
+    .soc_denominator = 4000,
+    .lowest_cell_open_voltage_at_shutdown = 0,
+    .milliamp_hours_left_battery_since_start_of_ride = 0,
+    .milliamp_hours_regened_into_battery_start_of_ride = 0  
 };
+
 
 
 
@@ -447,6 +453,53 @@ uint8_t flash_ReadByte(uint32_t address) {
     return data;
 }
 
+
+
+
+
+// --- FLASH PARTITION MAP ---
+#define ADDR_BATTERY_STATE    0x005000  // Sector 5
+#define SIZE_BATTERY_STATE    0x001000  // 4KB Reserved
+
+// Generalized Write: Erases the slot and writes data chunked by pages
+void flash_WriteStaticBlock(uint32_t address, uint32_t reservedSize, const void *data, size_t dataSize) {
+    if (dataSize > reservedSize) return;
+    uint32_t sectors = (reservedSize + 4095) / 4096;
+    for (uint32_t i = 0; i < sectors; i++) flash_EraseSector(address + (i * 4096));
+
+    const uint8_t *ptr = (const uint8_t *)data;
+    uint32_t currentAddr = address;
+    size_t remaining = dataSize;
+    while (remaining > 0) {
+        uint32_t maxInPage = 256 - (currentAddr % 256);
+        uint32_t chunk = (remaining > maxInPage) ? maxInPage : remaining;
+        flash_WriteEnable();
+        IO_RC4_SetLow();
+        spi1_exchangeByte(0x02);
+        spi1_exchangeByte((currentAddr >> 16) & 0xFF);
+        spi1_exchangeByte((currentAddr >> 8) & 0xFF);
+        spi1_exchangeByte(currentAddr & 0xFF);
+        for (uint32_t i = 0; i < chunk; i++) spi1_exchangeByte(*ptr++);
+        IO_RC4_SetHigh();
+        flash_WaitBusy();
+        remaining -= chunk;
+        currentAddr += chunk;
+    }
+}
+
+// Generalized Read
+void flash_ReadBlock(uint32_t address, void *dest, size_t length) {
+    uint8_t *ptr = (uint8_t *)dest;
+    IO_RC4_SetLow();
+    spi1_exchangeByte(0x03);
+    spi1_exchangeByte((address >> 16) & 0xFF);
+    spi1_exchangeByte((address >> 8) & 0xFF);
+    spi1_exchangeByte(address & 0xFF);
+    for (size_t i = 0; i < length; i++) ptr[i] = spi1_exchangeByte(0x00);
+    IO_RC4_SetHigh();
+}
+
+
 // =======================================================================
 // NUMBER PERSISTENCE TEST
 // =======================================================================
@@ -541,16 +594,16 @@ float flash_ReadFloat(uint32_t address) {
 }
 
 
-volatile uint32_t SOCDenominatorAddress = 0x003000;
-volatile float SOCDenominator = 0; //Default value
-volatile float SOCNumerator = 0; 
+//volatile uint32_t SOCDenominatorAddress = 0x003000;
+//volatile float SOCDenominator = 0; //Default value
+//volatile float SOCNumerator = 0; 
 
 
 
-volatile uint32_t AccumulatedAmpHoursAddress = 0x001000;
-volatile float AccumulatedAmpHours = 0;
-volatile float AccumulatedRegenAmpHours = 0;
-volatile float InstantaneousAmpHours = 0;
+//volatile uint32_t AccumulatedAmpHoursAddress = 0x001000;
+//volatile float AccumulatedAmpHours = 0;
+//volatile float AccumulatedRegenAmpHours = 0;
+//volatile float InstantaneousAmpHours = 0;
 
 
 // =======================================================================
@@ -753,18 +806,43 @@ int main(void)
     
     
     if(DEBUG_ENABLED) Serial_printlnf("powerGood = chargingEnabled && dischargingEnabled; powerGood = %s", powerGood ? "true" : "false");
-    AccumulatedAmpHours = flash_ReadFloat(AccumulatedAmpHoursAddress);
-    if(DEBUG_ENABLED) Serial_printlnf(">>> Since last at 100%, we have discharged: %f mAh <<<", (double)AccumulatedAmpHours);
+//    AccumulatedAmpHours = flash_ReadFloat(AccumulatedAmpHoursAddress);
+//    if(DEBUG_ENABLED) Serial_printlnf(">>> Since last at 100%, we have discharged: %f mAh <<<", (double)AccumulatedAmpHours);
     
     
-    SOCDenominator = flash_ReadFloat(SOCDenominatorAddress);
-    if(SOCDenominator < 2000){
-        SOCDenominator = 2000; //Set to 2000 if saved value is less than 2000
+    
+    
+    
+    
+    
+    
+    
+//    SOCDenominator = flash_ReadFloat(SOCDenominatorAddress); Commenting this out BUT THIS FUNCTIONALITY NEEDS TO BE HERE
+//    if(SOCDenominator < 2000){
+//        SOCDenominator = 2000; //Set to 2000 if saved value is less than 2000
+//    }
+    
+    
+//    if(DEBUG_ENABLED) Serial_printlnf("flash_ReadFloat(SOCDenominatorAddress): %d  ", (int)flash_ReadFloat(SOCDenominatorAddress));
+//    if(DEBUG_ENABLED) Serial_printlnf("SOC Denominator: %d mAh", (int)SOCDenominator);
+    
+    
+    // Replace your old AccumulatedAmpHours = flash_ReadFloat(...) lines with:
+    BatteryProfile flashData;
+    flash_ReadBlock(ADDR_BATTERY_STATE, &flashData, sizeof(flashData));
+
+    if (flashData.soc_denominator != 0xFFFFFFFF && flashData.soc_denominator > 0) {
+        batteryProfile = flashData;
+        mah_consumed = (float)batteryProfile.milliamp_hours_left_battery_since_start_of_ride;
+        mah_regened = (float)batteryProfile.milliamp_hours_regened_into_battery_start_of_ride;
+
+        // Check for Drift (Was there self-discharge beyond -100mV in any given cell since last we were on?)
+        uint32_t currentVoltage = bms_GetMinCellVoltage();
+        if(currentVoltage < batteryProfile.lowest_cell_open_voltage_at_shutdown - 100) {
+            Serial_println("Drift detected. Using open-circuit approximation to calculate SOC");
+            //Logic goes here
+        }
     }
-    
-    
-    if(DEBUG_ENABLED) Serial_printlnf("flash_ReadFloat(SOCDenominatorAddress): %d  ", (int)flash_ReadFloat(SOCDenominatorAddress));
-    if(DEBUG_ENABLED) Serial_printlnf("SOC Denominator: %d mAh", (int)SOCDenominator);
     
     
     
@@ -785,7 +863,7 @@ int main(void)
     
     
     //This doesn't exist right now     SOCNumerator = ((float)interpolateBasedOnVoltage(bms_GetMinCellVoltage())/100) * SOCDenominator;
-    if(DEBUG_ENABLED) Serial_printlnf("Setting SOC Numerator To: %d ", (int)SOCNumerator);
+    //if(DEBUG_ENABLED) Serial_printlnf("Setting SOC Numerator To: %d ", (int)SOCNumerator);
     
     while (running) //Main loop, sits here until we want to power off the battery
     {
@@ -818,8 +896,19 @@ int main(void)
                 last_integration_millis = now;
 
                 float current_mA = batteryCurrentBMS * 1000.0f;
-                mah_consumed += current_mA * ((float)dt / 3600000.0f);      // Positive current = discharge by current convention
+                float interval_mah = current_mA * ((float)dt / 3600000.0f);
 
+                if (interval_mah > 0) {
+                    mah_consumed += interval_mah;
+                } else {
+                    mah_regened += (-interval_mah); // Accumulate regen as a positive sum
+                }
+
+                mah_net = mah_consumed - mah_regened;
+                
+                //mah_consumed += current_mA * ((float)dt / 3600000.0f);      // Positive current = discharge by current convention
+                
+                
                 // periodically update the profile history (once per second)
                 if(now - last_capacity_update >= 1000) {
                     BatteryProfile_UpdateCapacity(&batteryProfile,
@@ -838,12 +927,12 @@ int main(void)
             float maxCharge_A = maxCharge_mA/1000;
             
             //InstantaneousAmpHours = batteryCurrentBMS * ((bmsUpdateInterval*50) / 1000 ) * (1/3600); 
-            InstantaneousAmpHours = batteryCurrentBMS * ((bmsUpdateInterval * 50.0) / 1000.0 ) * (1.0 / 3600.0);
-            if(DEBUG_ENABLED) Serial_printlnf("Instantaneous Discharge Current: %f mA ", (double)batteryCurrentBMS);
-            if(DEBUG_ENABLED) Serial_printlnf("Instantaneous Amp Hours in a %f millisecond window: %f mAh ", (float)(bmsUpdateInterval*50),(double)InstantaneousAmpHours);
+            //InstantaneousAmpHours = batteryCurrentBMS * ((bmsUpdateInterval * 50.0) / 1000.0 ) * (1.0 / 3600.0);
+            //if(DEBUG_ENABLED) Serial_printlnf("Instantaneous Discharge Current: %f mA ", (double)batteryCurrentBMS);
+            //if(DEBUG_ENABLED) Serial_printlnf("Instantaneous Amp Hours in a %f millisecond window: %f mAh ", (float)(bmsUpdateInterval*50),(double)InstantaneousAmpHours);
             
             
-            AccumulatedAmpHours = AccumulatedAmpHours + InstantaneousAmpHours;
+            //AccumulatedAmpHours = AccumulatedAmpHours + InstantaneousAmpHours;
             
             
             
@@ -1327,17 +1416,25 @@ int main(void)
 void shutdownSequence(void){
     
     
-    Serial_println("Saving Accumulated Amp Hours to Flash...");
-    if(DEBUG_ENABLED) Serial_printlnf(">>> Since last at 100%, we have discharged: %f mAh <<<", AccumulatedAmpHours);
-    if(DEBUG_ENABLED) Serial_printlnf(">>> Since last at 100%, we have discharged: %f mAh <<<", AccumulatedRegenAmpHours);
-    flash_WriteFloat(AccumulatedAmpHoursAddress, AccumulatedAmpHours);
+//    Serial_println("Saving Accumulated Amp Hours to Flash...");
+//    if(DEBUG_ENABLED) Serial_printlnf(">>> Since last at 100%, we have discharged: %f mAh <<<", AccumulatedAmpHours);
+//    if(DEBUG_ENABLED) Serial_printlnf(">>> Since last at 100%, we have discharged: %f mAh <<<", AccumulatedRegenAmpHours);
+    //flash_WriteFloat(AccumulatedAmpHoursAddress, AccumulatedAmpHours);
     
     
     
-    //flash_WriteBatteryProfile()//
+    //flash_WriteBatteryProfile()
+    batteryProfile.milliamp_hours_left_battery_since_start_of_ride = (uint32_t)mah_consumed;
+    batteryProfile.milliamp_hours_regened_into_battery_start_of_ride = (uint32_t)mah_regened;
+    batteryProfile.lowest_cell_open_voltage_at_shutdown = bms_GetMinCellVoltage();
+    flash_WriteStaticBlock(ADDR_BATTERY_STATE, SIZE_BATTERY_STATE, &batteryProfile, sizeof(batteryProfile));
+
     
-    AccumulatedAmpHours = flash_ReadFloat(AccumulatedAmpHoursAddress);
-    if(DEBUG_ENABLED) Serial_printlnf(">>> Verification: %f mAh <<<", AccumulatedAmpHours);
+    
+//    AccumulatedAmpHours = flash_ReadFloat(AccumulatedAmpHoursAddress);
+//    if(DEBUG_ENABLED) Serial_printlnf(">>> Verification: %f mAh <<<", AccumulatedAmpHours);
+    
+    Serial_println("Save Complete. Shutting Down BMS...");
     
     bms_DisableDischarging();   //Disconnect battery from speed controller
     bms_DisableCharging();
