@@ -271,9 +271,10 @@ volatile bool shutdownFromESCDetected = false;
 
 
 // coulomb?counting globals
-volatile float mah_consumed = 0.0f;                //milliamp?hours consumed since boot
+//volatile float mah_consumed = 0.0f;                //milliamp?hours consumed since boot //This is confusing; replaced all mentions with mah_net or mah_discharged depending on sign convention
 volatile float mah_regened = 0.0f;
 volatile float mah_net = 0.0f;
+volatile float mah_discharged = 0.0f;
 static uint64_t last_integration_millis = 0;       //timestamp of last current integration
 static uint64_t last_capacity_update = 0;          //timestamp for calling BatteryProfile_UpdateCapacity
 extern volatile bool battery_profile_capturing;
@@ -833,7 +834,7 @@ int main(void)
 
     if (flashData.soc_denominator != 0xFFFFFFFF && flashData.soc_denominator > 0) {
         batteryProfile = flashData;
-        mah_consumed = (float)batteryProfile.milliamp_hours_left_battery_since_start_of_ride;
+        mah_net = (float)batteryProfile.milliamp_hours_left_battery_since_start_of_ride;
         mah_regened = (float)batteryProfile.milliamp_hours_regened_into_battery_start_of_ride;
 
         // Check for Drift (Was there self-discharge beyond -100mV in any given cell since last we were on?)
@@ -899,12 +900,14 @@ int main(void)
                 float interval_mah = current_mA * ((float)dt / 3600000.0f);
 
                 if (interval_mah > 0) {
-                    mah_consumed += interval_mah;
+                    //mah_net += interval_mah;
+                    mah_discharged += interval_mah;
                 } else {
                     mah_regened += (-interval_mah); // Accumulate regen as a positive sum
                 }
 
-                mah_net = mah_consumed - mah_regened;
+                //mah_net = mah_consumed - mah_regened; THIS IS BAD
+                mah_net = mah_discharged - mah_regened; // 
                 
                 //mah_consumed += current_mA * ((float)dt / 3600000.0f);      // Positive current = discharge by current convention
                 
@@ -912,7 +915,7 @@ int main(void)
                 // periodically update the profile history (once per second)
                 if(now - last_capacity_update >= 1000) {
                     BatteryProfile_UpdateCapacity(&batteryProfile,
-                                                  (uint32_t)mah_consumed,
+                                                  (uint32_t)mah_discharged,
                                                   (uint16_t)bms_GetMinCellVoltage(),
                                                   (uint16_t)bms_GetMaxCellVoltage(),
                                                   current_mA,
@@ -1424,7 +1427,8 @@ void shutdownSequence(void){
     
     
     //flash_WriteBatteryProfile()
-    batteryProfile.milliamp_hours_left_battery_since_start_of_ride = (uint32_t)mah_consumed;
+//    batteryProfile.milliamp_hours_left_battery_since_start_of_ride = (uint32_t)mah_consumed;
+    batteryProfile.milliamp_hours_left_battery_since_start_of_ride = (uint32_t)mah_net;
     batteryProfile.milliamp_hours_regened_into_battery_start_of_ride = (uint32_t)mah_regened;
     batteryProfile.lowest_cell_open_voltage_at_shutdown = bms_GetMinCellVoltage();
     flash_WriteStaticBlock(ADDR_BATTERY_STATE, SIZE_BATTERY_STATE, &batteryProfile, sizeof(batteryProfile));
@@ -1636,13 +1640,16 @@ void updateSOC(void){
         soc = BatteryProfile_GetSOCFromVoltage(&batteryProfile, minV);
         Serial_printlnf("Initial SOC: %d", (int)soc);
         // initialize consumed counter using the lookup
-        mah_consumed = (float)BatteryProfile_ConsumedFromSOC(&batteryProfile, soc);
-        Serial_printlnf("Initial mAH consumed: %d", (int)mah_consumed);
+//        mah_consumed = (float)BatteryProfile_ConsumedFromSOC(&batteryProfile, soc);
+        mah_net = (float)BatteryProfile_ConsumedFromSOC(&batteryProfile, soc);
+//        Serial_printlnf("Initial mAH consumed: %d", (int)mah_consumed);
+        Serial_printlnf("Initial mAH net: %d", (int)mah_net);
         firstCall = false;
     } else {
         // historical capacity approach thereafter
         soc = BatteryProfile_GetSOCFromHistoricalCapacity(&batteryProfile,
-                                                         (uint32_t)mah_consumed);
+//                                                         (uint32_t)mah_consumed);
+                                                        (uint32_t)mah_net);
     }
 
     // clamp results and write the global
