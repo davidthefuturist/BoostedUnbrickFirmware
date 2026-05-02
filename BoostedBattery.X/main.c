@@ -915,7 +915,7 @@ int main(void)
                 // periodically update the profile history (once per second)
                 if(now - last_capacity_update >= 1000) {
                     BatteryProfile_UpdateCapacity(&batteryProfile,
-                                                  (uint32_t)mah_discharged,
+                                                  (uint32_t)mah_net,
                                                   (uint16_t)bms_GetMinCellVoltage(),
                                                   (uint16_t)bms_GetMaxCellVoltage(),
                                                   current_mA,
