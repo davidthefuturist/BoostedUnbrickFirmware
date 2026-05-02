@@ -73,9 +73,9 @@ float BatteryProfile_GetSOCFromHistoricalCapacity(const BatteryProfile *profile,
             return 0.0f;
         }
         else{
-            float soc = (1.0f - ((float)consumed_mAH / (float)historical_mAh_capacity_average)) * 100.0f;
-            if(soc > 100.0f) soc = 100.0f;
-            return soc;
+//            float soc = (1.0f - ((float)consumed_mAH / (float)historical_mAh_capacity_average)) * 100.0f;
+//            if(soc > 100.0f) soc = 100.0f;
+//            return soc; //This was freezing our SOC indicator
         }
     }
 
