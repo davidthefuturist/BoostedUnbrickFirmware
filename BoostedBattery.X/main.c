@@ -67,7 +67,8 @@
 
 #define EMULATE_XRB             true
 
-#define DEBUG_ENABLED           false       //Enables serial printing of all messages
+#define DEBUG_ENABLED                      false       //Enables serial printing of all messages
+#define HISTORICAL_DEBUG_ENABLED           true       //Enables serial printing of historical discharge data
 #define CELL_COUNT              13      //Number of cells in pack
 //#define MIN_CELL_MV             3300    //Cell cutoff voltage
 //#define MIN_CELL_MV             3100    //10/25/25 05:53:30 PM Changed to 3100 to more closely match B2XR behavior
@@ -767,7 +768,43 @@ int main(void)
         
     updateLEDs();           //Reset the LED controller with default values.
     
+    mah_discharged = mah_net + mah_regened; //Calculate SOC with historical data 
     updateSOC();            //Calculate SOC with first read values from BMS
+    
+    
+    
+    
+    
+//    
+//    // --- BOOTUP DIAGNOSTICS ---
+//    if(DEBUG_ENABLED) {
+//        Serial_println("");
+//        if(battery_profile_capturing) {
+//            Serial_println("RECORDING IN PROGRESS");
+//        } else {
+//            Serial_println("RECORDING STATUS: IDLE");
+//        }
+//        Serial_printlnf("Initial SOC: %d", batterySOC);
+//        Serial_printlnf("Initial mAH net: %d", (int)mah_net);
+//        Serial_printlnf("mah_discharged: %d", (int)mah_discharged);
+//        Serial_printlnf("mah_regened: %d", (int)mah_regened);
+//        Serial_println("");
+//        Serial_println("HISTORICAL DATA");
+//        
+//        // Loop through the 3 historical slots
+//        for(int i = 0; i < BATTERY_PROFILE_HISTORY_COUNT; i++) {
+//            Serial_printlnf("DISCHARGE %d: %lu", i + 1, batteryProfile.battery_historical_mAh[i]);
+//            Serial_printlnf("CHARGE %d: 0 (Placeholder)", i + 1);
+//        }
+//        Serial_println("------------------------\n");
+//    }
+//    // --------------------------
+//    
+    
+    
+    
+    
+    
     
     for(int i = 0; i < batterySOC; i++){    //Play animation to fill up 5-dot array up to SOC amount
         mapPercentageToLEDs(i, false);      //Takes a SOC (0-100) and maps it across the 5 leds by updating LED object. Each fully-bright LED is 20%. Brightness scaled linearly.
@@ -851,6 +888,7 @@ int main(void)
     IO_RA7_SetLow();    //Turn off precharge for the capacitors in the ESC
     if(DEBUG_ENABLED) Serial_println("Turning off precharge!");
         
+    if(EMULATE_XRB == false) beginCANBusSRB();      //SRB has four packets sent once on startup
     if(EMULATE_XRB == false) beginCANBusSRB();      //SRB has four packets sent once on startup
     //if(EMULATE_XRB == true) beginCANBusXRB();      //Emulate XRB here when implemented
     

@@ -4,9 +4,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define BATTERY_PROFILE_HISTORY_COUNT           3
-#define BATTERY_PROFILE_SOC_AVG_COUNT           10  /* number of samples for SOC rolling average */
-#define BATTERY_FULL_CHARGE_SOC_THRESHOLD       15.0f
+#define BATTERY_PROFILE_HISTORY_COUNT           30   // Change this to 30 from 3
+#define BATTERY_PROFILE_SOC_AVG_COUNT           30  /* number of samples for SOC rolling average  Originally 10      */
+#define BATTERY_FULL_CHARGE_SOC_THRESHOLD       95.0f
 #define BATTERY_EMPTY_SOC_THRESHOLD             5.0f
 #define BATTERY_EXTRAPOLATED_CAPACITY_FACTOR    1.05f
 
